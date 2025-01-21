@@ -10,6 +10,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClient } from "@/lib/supabase/client"
 import { User, Building2, AlertCircle, Calendar, Clock } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface SupabaseMessage {
   id: string
@@ -57,6 +63,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
   const [newMessage, setNewMessage] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const { toast } = useToast()
@@ -206,6 +213,64 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
     }
   }
 
+  const updateTicketStatus = async (newStatus: Ticket['ticket_status']) => {
+    setIsUpdating(true)
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({ ticket_status: newStatus })
+        .eq('id', params.id)
+
+      if (error) throw error
+
+      setTicket((prev): Ticket | null => 
+        prev ? { ...prev, ticket_status: newStatus } : null
+      )
+      toast({
+        title: "Status updated",
+        description: `Ticket status has been updated to ${newStatus.replace('_', ' ')}.`,
+      })
+    } catch (error) {
+      console.error('Error updating ticket status:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update ticket status.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const updateTicketPriority = async (newPriority: NonNullable<Ticket['priority']>) => {
+    setIsUpdating(true)
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({ priority: newPriority })
+        .eq('id', params.id)
+
+      if (error) throw error
+
+      setTicket((prev): Ticket | null => 
+        prev ? { ...prev, priority: newPriority } : null
+      )
+      toast({
+        title: "Priority updated",
+        description: `Ticket priority has been updated to ${newPriority}.`,
+      })
+    } catch (error) {
+      console.error('Error updating ticket priority:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update ticket priority.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -256,14 +321,64 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
             </div>
             <div className="text-right">
               <div className="text-sm font-medium text-gray-900">Status</div>
-              <div className={`mt-1 text-sm ${
-                ticket.ticket_status === 'new' ? 'text-blue-600' :
-                ticket.ticket_status === 'in_progress' ? 'text-yellow-600' :
-                ticket.ticket_status === 'requires_response' ? 'text-red-600' :
-                'text-green-600'
-              }`}>
-                {ticket.ticket_status.replace('_', ' ').toUpperCase()}
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger disabled={isUpdating} asChild>
+                  <button
+                    className={`mt-1 text-sm px-2 py-1 rounded hover:bg-gray-100 ${
+                      ticket.ticket_status === 'new' ? 'text-blue-600' :
+                      ticket.ticket_status === 'in_progress' ? 'text-yellow-600' :
+                      ticket.ticket_status === 'requires_response' ? 'text-red-600' :
+                      'text-green-600'
+                    }`}
+                  >
+                    {ticket.ticket_status.replace('_', ' ').toUpperCase()}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => updateTicketStatus('new')}>
+                    NEW
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTicketStatus('in_progress')}>
+                    IN PROGRESS
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTicketStatus('requires_response')}>
+                    REQUIRES RESPONSE
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTicketStatus('closed')}>
+                    CLOSED
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="text-sm font-medium text-gray-900 mt-2">Priority</div>
+              <DropdownMenu>
+                <DropdownMenuTrigger disabled={isUpdating} asChild>
+                  <button
+                    className={`mt-1 text-sm px-2 py-1 rounded hover:bg-gray-100 ${
+                      ticket.priority === 'urgent' ? 'text-red-600' :
+                      ticket.priority === 'high' ? 'text-orange-600' :
+                      ticket.priority === 'medium' ? 'text-yellow-600' :
+                      ticket.priority === 'low' ? 'text-green-600' :
+                      'text-gray-600'
+                    }`}
+                  >
+                    {ticket.priority ? ticket.priority.toUpperCase() : 'NOT SET'}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => updateTicketPriority('urgent')}>
+                    URGENT
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTicketPriority('high')}>
+                    HIGH
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTicketPriority('medium')}>
+                    MEDIUM
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTicketPriority('low')}>
+                    LOW
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {ticket.assigned_to_supporter && (
                 <div className="mt-2">
                   <div className="text-sm font-medium text-gray-900">Assigned To</div>
