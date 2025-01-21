@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlusCircle, Bot, BarChart } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { RouteCaseDialog } from "@/components/route-case-dialog"
 
 interface Ticket {
   id: string
@@ -35,88 +36,61 @@ export default function SupporterDashboard() {
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    const fetchTickets = async () => {
-      try {
-        // Fetch unclaimed tickets (status = 'new')
-        const { data: newTickets, error: newTicketsError } = await supabase
-          .from('tickets')
-          .select(`
-            *,
-            created_by_user:created_by_user_id (
+  const fetchTickets = async () => {
+    try {
+      setIsLoading(true)
+      // Fetch unclaimed tickets (status = 'new')
+      const { data: newTickets, error: newTicketsError } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          created_by_user:created_by_user_id (
+            id,
+            full_name,
+            company:company_id (
               id,
-              full_name,
-              company:company_id (
-                id,
-                company_name
-              )
+              company_name
             )
-          `)
-          .eq('ticket_status', 'new')
-          .order('created_at', { ascending: false })
+          )
+        `)
+        .eq('ticket_status', 'new')
+        .order('created_at', { ascending: false })
 
-        if (newTicketsError) throw newTicketsError
-        setUnclaimedCases(newTickets || [])
+      if (newTicketsError) throw newTicketsError
+      setUnclaimedCases(newTickets || [])
 
-        // Fetch my assigned tickets (status != 'new')
-        const { data: myTickets, error: myTicketsError } = await supabase
-          .from('tickets')
-          .select(`
-            *,
-            created_by_user:created_by_user_id (
+      // Fetch my assigned tickets (status != 'new')
+      const { data: myTickets, error: myTicketsError } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          created_by_user:created_by_user_id (
+            id,
+            full_name,
+            company:company_id (
               id,
-              full_name,
-              company:company_id (
-                id,
-                company_name
-              )
+              company_name
             )
-          `)
-          .neq('ticket_status', 'new')
-          .order('updated_at', { ascending: false })
+          )
+        `)
+        .neq('ticket_status', 'new')
+        .order('updated_at', { ascending: false })
 
-        if (myTicketsError) throw myTicketsError
-        setMyCases(myTickets || [])
-      } catch (error) {
-        console.error('Error fetching tickets:', error)
-      } finally {
-        setIsLoading(false)
-      }
+      if (myTicketsError) throw myTicketsError
+      setMyCases(myTickets || [])
+    } catch (error) {
+      console.error('Error fetching tickets:', error)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchTickets()
   }, [])
 
   const handleTicketClick = (ticketId: string) => {
     router.push(`/tickets/${ticketId}`)
-  }
-
-  const handleClaimTicket = async (ticketId: string) => {
-    try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      if (userError) throw userError
-      if (!user) throw new Error('No authenticated user')
-
-      // Update ticket assignment in the database
-      const { error: updateError } = await supabase
-        .from('tickets')
-        .update({ 
-          ticket_status: 'in_progress',
-          assigned_to_supporter_id: user.id
-        })
-        .eq('id', ticketId)
-
-      if (updateError) throw updateError
-
-      // Update local state
-      const ticket = unclaimedCases.find(t => t.id === ticketId)
-      if (ticket) {
-        setUnclaimedCases(unclaimedCases.filter(t => t.id !== ticketId))
-        setMyCases([{ ...ticket, ticket_status: 'in_progress' }, ...myCases])
-      }
-    } catch (error) {
-      console.error('Error claiming ticket:', error)
-    }
   }
 
   return (
@@ -158,7 +132,10 @@ export default function SupporterDashboard() {
                       <CardHeader>
                         <CardTitle className="text-lg flex justify-between">
                           <span>{ticket.title}</span>
-                          <Button onClick={() => handleClaimTicket(ticket.id)}>Claim Case</Button>
+                          <RouteCaseDialog
+                            ticketId={ticket.id}
+                            onRouteComplete={fetchTickets}
+                          />
                         </CardTitle>
                       </CardHeader>
                       <CardContent>

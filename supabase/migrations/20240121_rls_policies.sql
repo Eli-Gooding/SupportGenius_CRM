@@ -42,13 +42,9 @@ create policy "Users can create tickets"
     on tickets for insert
     with check (created_by_user_id = auth.uid());
 
-create policy "Supporters can update assigned tickets"
+create policy "Supporters can update any ticket"
     on tickets for update
-    using (auth.uid() in (select id from supporters))
-    with check (
-        auth.uid() = assigned_to_supporter_id or
-        assigned_to_supporter_id is null
-    );
+    using (auth.uid() in (select id from supporters));
 
 -- Messages table policies
 create policy "Users can view messages in their tickets"
