@@ -1,28 +1,50 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { createClient } from "@/lib/supabase/client"
 
-const ticketCategories = ["Account Access", "Billing", "Feature Request", "Bug Report", "General Inquiry"]
+interface Category {
+  id: string
+  category_name: string
+  description: string | null
+}
 
 interface CreateNewCaseDialogProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (category: string, description: string) => void
+  onSubmit: (categoryId: string, description: string) => void
 }
 
 export function CreateNewCaseDialog({ isOpen, onClose, onSubmit }: CreateNewCaseDialogProps) {
-  const [category, setCategory] = useState("")
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState("")
   const [description, setDescription] = useState("")
+  const supabase = createClient()
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('category_name')
+
+      if (!error && data) {
+        setCategories(data)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(category, description)
-    setCategory("")
+    onSubmit(selectedCategoryId, description)
+    setSelectedCategoryId("")
     setDescription("")
   }
 
@@ -38,14 +60,14 @@ export function CreateNewCaseDialog({ isOpen, onClose, onSubmit }: CreateNewCase
               <Label htmlFor="category" className="text-right">
                 Category
               </Label>
-              <Select value={category} onValueChange={setCategory} required>
+              <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId} required>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ticketCategories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.category_name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,49 +1,116 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PlusCircle, Bot } from "lucide-react"
 import { CreateNewCaseDialog } from "@/components/create-new-case-dialog"
+import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/components/ui/use-toast"
 
-// Sample ticket data
-const tickets = [
-  { id: 1, title: "Cannot access account", status: "Open", createdAt: "2023-05-01" },
-  { id: 2, title: "Feature request: Dark mode", status: "Closed", createdAt: "2023-04-28" },
-  { id: 3, title: "Bug in reporting module", status: "Open", createdAt: "2023-04-30" },
-  { id: 4, title: "Update user profile", status: "Open", createdAt: "2023-05-02" },
-  { id: 5, title: "Password reset not working", status: "Closed", createdAt: "2023-04-25" },
-  { id: 6, title: "Add export to PDF feature", status: "Open", createdAt: "2023-05-03" },
-  { id: 7, title: "Mobile app crashing", status: "Open", createdAt: "2023-05-04" },
-  { id: 8, title: "Incorrect billing amount", status: "Closed", createdAt: "2023-04-22" },
-  { id: 9, title: "Update terms of service", status: "Open", createdAt: "2023-05-05" },
-  { id: 10, title: "Slow loading times", status: "Closed", createdAt: "2023-04-20" },
-]
+interface Ticket {
+  id: string
+  title: string
+  ticket_status: 'new' | 'in_progress' | 'requires_response' | 'closed'
+  created_at: string
+  updated_at: string
+}
 
 export default function Dashboard() {
-  const [activeTickets, setActiveTickets] = useState(tickets.filter((ticket) => ticket.status === "Open"))
-  const [closedTickets, setClosedTickets] = useState(tickets.filter((ticket) => ticket.status === "Closed"))
+  const [activeTickets, setActiveTickets] = useState<Ticket[]>([])
+  const [closedTickets, setClosedTickets] = useState<Ticket[]>([])
   const [isCreateNewCaseOpen, setIsCreateNewCaseOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const supabase = createClient()
+  const { toast } = useToast()
 
-  const handleTicketClick = (ticketId: number) => {
+  const fetchTickets = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        router.push('/login')
+        return
+      }
+
+      const { data: tickets, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('created_by_user_id', session.user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      if (tickets) {
+        setActiveTickets(tickets.filter(ticket => ticket.ticket_status !== 'closed'))
+        setClosedTickets(tickets.filter(ticket => ticket.ticket_status === 'closed'))
+      }
+    } catch (error) {
+      console.error('Error fetching tickets:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load tickets. Please try again later.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchTickets()
+  }, [])
+
+  const handleTicketClick = (ticketId: string) => {
     router.push(`/tickets/${ticketId}`)
   }
 
-  const handleCreateNewCase = (category: string, description: string) => {
-    // Here you would typically send the new case data to your backend
-    console.log("New case created:", { category, description })
-    // For now, let's just add it to the active tickets
-    const newTicket = {
-      id: tickets.length + 1,
-      title: description.slice(0, 50) + (description.length > 50 ? "..." : ""),
-      status: "Open",
-      createdAt: new Date().toISOString().split("T")[0],
+  const handleCreateNewCase = async (categoryId: string, description: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        router.push('/login')
+        return
+      }
+
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .insert([
+          {
+            title: description.slice(0, 100), // Use first 100 chars as title
+            category_id: categoryId,
+            created_by_user_id: session.user.id,
+            ticket_status: 'new'
+          }
+        ])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      if (ticket) {
+        setActiveTickets([ticket, ...activeTickets])
+        toast({
+          title: "Success",
+          description: "New case created successfully.",
+        })
+      }
+    } catch (error) {
+      console.error('Error creating ticket:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create new case. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCreateNewCaseOpen(false)
     }
-    setActiveTickets([newTicket, ...activeTickets])
-    setIsCreateNewCaseOpen(false)
+  }
+
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-screen">Loading...</div>
   }
 
   return (
@@ -79,11 +146,14 @@ export default function Dashboard() {
                       <CardTitle className="text-lg">{ticket.title}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-gray-500">Status: {ticket.status}</p>
-                      <p className="text-sm text-gray-500">Created: {ticket.createdAt}</p>
+                      <p className="text-sm text-gray-500">Status: {ticket.ticket_status}</p>
+                      <p className="text-sm text-gray-500">Created: {new Date(ticket.created_at).toLocaleDateString()}</p>
                     </CardContent>
                   </Card>
                 ))}
+                {activeTickets.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">No active tickets</p>
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -101,11 +171,14 @@ export default function Dashboard() {
                       <CardTitle className="text-lg">{ticket.title}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-gray-500">Status: {ticket.status}</p>
-                      <p className="text-sm text-gray-500">Created: {ticket.createdAt}</p>
+                      <p className="text-sm text-gray-500">Status: {ticket.ticket_status}</p>
+                      <p className="text-sm text-gray-500">Created: {new Date(ticket.created_at).toLocaleDateString()}</p>
                     </CardContent>
                   </Card>
                 ))}
+                {closedTickets.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">No closed tickets</p>
+                )}
               </div>
             </ScrollArea>
           </div>
