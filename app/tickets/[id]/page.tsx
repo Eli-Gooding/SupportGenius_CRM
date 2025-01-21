@@ -56,6 +56,7 @@ interface Ticket {
     } | null
   } | null
   assigned_to_supporter: {
+    id: string
     full_name: string
   } | null
 }
@@ -144,6 +145,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
               )
             ),
             assigned_to_supporter: supporters!assigned_to_supporter_id (
+              id,
               full_name
             )
           `)
@@ -397,7 +399,12 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
               {ticket.assigned_to_supporter && (
                 <div className="mt-2">
                   <div className="text-sm font-medium text-gray-900">Assigned To</div>
-                  <div className="text-sm text-gray-500">{ticket.assigned_to_supporter.full_name}</div>
+                  <Link
+                    href={`/supporter/${ticket.assigned_to_supporter.id}`}
+                    className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
+                  >
+                    {ticket.assigned_to_supporter.full_name}
+                  </Link>
                 </div>
               )}
             </div>
