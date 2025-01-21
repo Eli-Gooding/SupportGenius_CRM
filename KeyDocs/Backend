@@ -1,0 +1,149 @@
+# AutoCRM Database Schema Design
+
+This document outlines the database schema for the AutoCRM ticketing system.
+
+## Core Tables
+
+### Users (Customers)
+```sql
+create table users (
+    id uuid default uuid_generate_v4() primary key,
+    email text unique not null,
+    full_name text not null,
+    company_id uuid references companies(id),
+    created_at timestamp with time zone default now(),
+    last_login timestamp with time zone
+);
+```
+
+### Companies
+```sql
+create table companies (
+    id uuid default uuid_generate_v4() primary key,
+    company_name text not null,
+    created_at timestamp with time zone default now()
+);
+```
+
+### Supporters
+```sql
+create table supporters (
+    id uuid default uuid_generate_v4() primary key,
+    email text unique not null,
+    full_name text not null,
+    created_at timestamp with time zone default now(),
+    last_login timestamp with time zone
+);
+```
+
+### Categories
+```sql
+create table categories (
+    id uuid default uuid_generate_v4() primary key,
+    category_name text not null,
+    description text
+);
+```
+
+### Tickets
+```sql
+create table tickets (
+    id uuid default uuid_generate_v4() primary key,
+    title text not null,
+    category_id uuid references categories(id),
+    created_by_user_id uuid references users(id),
+    assigned_to_supporter_id uuid references supporters(id),
+    ticket_status text not null check (ticket_status in ('new', 'in_progress', 'requires_response', 'closed')),
+    priority text check (priority in ('low', 'medium', 'high', 'urgent')),
+    created_at timestamp with time zone default now(),
+    updated_at timestamp with time zone default now(),
+    closed_at timestamp with time zone
+);
+```
+
+### Messages
+```sql
+create table messages (
+    id uuid default uuid_generate_v4() primary key,
+    ticket_id uuid references tickets(id),
+    sender_type text not null check (sender_type in ('user', 'supporter')),
+    sender_id uuid not null, -- references either users(id) or supporters(id)
+    content text not null,
+    created_at timestamp with time zone default now()
+);
+```
+
+### Notes (Internal)
+```sql
+create table notes (
+    id uuid default uuid_generate_v4() primary key,
+    ticket_id uuid references tickets(id),
+    supporter_id uuid references supporters(id),
+    note_title text,
+    content text not null,
+    created_at timestamp with time zone default now()
+);
+```
+
+### Ticket Status History
+```sql
+create table ticket_status_history (
+    id uuid default uuid_generate_v4() primary key,
+    ticket_id uuid references tickets(id),
+    old_ticket_status text,
+    new_ticket_status text not null,
+    changed_by_id uuid not null, -- references either users(id) or supporters(id)
+    changed_at timestamp with time zone default now()
+);
+```
+
+### Files
+```sql
+create table files (
+    id uuid default uuid_generate_v4() primary key,
+    file_name text not null,
+    file_size bigint not null,
+    mime_type text not null,
+    storage_path text not null,
+    uploaded_by_type text not null check (uploaded_by_type in ('user', 'supporter')),
+    uploaded_by_id uuid not null, -- references either users(id) or supporters(id)
+    ticket_id uuid references tickets(id),
+    message_id uuid references messages(id),
+    created_at timestamp with time zone default now(),
+    -- Either ticket_id or message_id should be set, but not both
+    constraint file_association_check check (
+        (ticket_id IS NOT NULL AND message_id IS NULL) OR
+        (ticket_id IS NULL AND message_id IS NOT NULL)
+    )
+);
+```
+
+## Additional Considerations
+
+### Required Indexes
+- `users(email)`
+- `supporters(email)`
+- `tickets(created_by_user_id)`
+- `tickets(assigned_to_supporter_id)`
+- `tickets(ticket_status)`
+- `messages(ticket_id)`
+- `notes(ticket_id)`
+- `files(ticket_id)`
+- `files(message_id)`
+
+### Row Level Security (RLS)
+We'll need to implement RLS policies to ensure:
+- Users can only see their own tickets and messages
+- Supporters can see all tickets but only modify their assigned ones
+- Notes are only visible to supporters
+
+### Triggers
+We should implement triggers for:
+1. Updating `updated_at` on tickets when modified
+2. Logging status changes to `ticket_status_history`
+3. Notifying relevant parties of new messages
+
+### Future Considerations
+1. Audit logging for sensitive operations
+2. Caching strategy for frequently accessed data
+3. Archiving strategy for old/closed tickets

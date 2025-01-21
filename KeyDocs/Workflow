@@ -1,0 +1,94 @@
+# AutoCRM Simplified Workflows
+
+Below is a simplified outline of the **Customer** and **Supporter** workflows within AutoCRM, along with a few suggestions to enhance the user experience and optimize the support process.
+
+---
+
+## 1. Customer Workflow
+
+1. **Login**
+   - **Scenario A**: Customer already has an account  
+     - They enter their credentials and are taken to their **Dashboard**.
+   - **Scenario B**: Customer does not have an account  
+     - They must create one by providing:
+       - Email  
+       - Password  
+       - Full Name  
+       - Company  
+     - After successful registration, they are directed to the **Dashboard**.
+
+2. **Dashboard**
+   - Displays the user's **Open Tickets** and **Closed Tickets**.
+   - Provides options to:
+     - **Create a New Case**  
+     - **Chat with a Help Bot** (future feature)
+
+3. **Create a New Case**
+   - The user selects from a list of **Categories** that best describe their issue.
+   - The user provides a **Short Description** of the problem.
+   - A **New Case** is then created and added to their **Open Tickets** list.
+   - Selecting a ticket in the list brings the user to a **Ticket Details Page**.
+
+4. **Ticket Details Page**
+   - Shows the **entire message history** (sent and received).
+   - Displays all **shared files**.
+   - Allows the user to **send new messages** (which should appear in real-time for the Supporter).
+   - Offers an option to **close the case**.
+   - When the Supporter sends a new message:
+     - The user sees it in real-time.
+     - The user receives an **email notification**.
+     - Supporter sets the state to "In Progress"
+    - When the Supporter reveives a new message, the state is set to "Requires Response"
+
+5. **Closed Tickets**
+   - When viewing a **Closed Ticket**, all content is **read-only**.
+   - All buttons/actions (e.g., sending messages, uploading files) are **greyed out** to prevent further updates.
+
+---
+
+## 2. Supporter Workflow
+
+1. **Login**
+   - **No account creation option** for Supporters, as they are pre-registered.
+   - After login, the Supporter can choose one of three dashboards:
+     - **Unclaimed Cases**
+     - **My Cases**
+     - **Overview**
+
+2. **Unclaimed Cases**
+   - Displays **newly created** (open) cases not yet claimed by any Supporter.
+   - Each case shows:
+     - **Requester info** (e.g., name, company).
+     - **Initial message** or description.
+   - The Supporter can **assign the ticket** to any other Supporter (including themselves).  
+     - Once claimed, the ticket moves to the **My Cases** dashboard of the assigned Supporter.
+
+3. **My Cases**
+   - Divided into two sections:
+     - **Open Cases**: active tickets.
+     - **Resolved (Closed) Cases**: completed, read-only tickets.
+   - For **Open Cases**:
+     - The Supporter can view all **past messages** and **files**.
+     - They can **send new messages** to the customer.
+     - They can **upload new files**.
+     - A **Notes** tab is available for internal-only notes. 
+       - Each note can have a **title** (or name) and a **text box** for details.
+     - There will also be a **priority** field that can be set by the Supporter.
+     - A **Ticket History** tab shows the complete timeline of the ticket:
+       - Displays all status changes chronologically
+       - Shows who made each change (supporter or customer)
+       - Includes timestamps for each status change
+       - Helps track ticket lifecycle and response times
+   - For **Closed Cases**:
+     - The ticket is **read-only**; no new updates can be made.
+
+4. **Overview Page**
+   - Offers **graphical insights** into support performance and metrics.
+   - The user can choose **x-axis** and **y-axis** options, such as:
+     - **Number of cases** vs. **Company**  
+     - **Average response time** vs. **Supporter**  
+   - Enables quick identification of bottlenecks or high-volume clients.
+   
+---
+
+**End of Document**
