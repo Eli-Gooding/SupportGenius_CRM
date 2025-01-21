@@ -118,6 +118,28 @@ create table files (
 );
 ```
 
+### Templates
+```sql
+create table templates (
+    id uuid default uuid_generate_v4() primary key,
+    template_name text not null,
+    content text not null,
+    created_by_supporter_id uuid references supporters(id),
+    is_active boolean default true,
+    created_at timestamp with time zone default now(),
+    updated_at timestamp with time zone default now()
+);
+
+-- Links templates to ticket categories they can be used in
+create table template_mappings (
+    id uuid default uuid_generate_v4() primary key,
+    template_id uuid references templates(id),
+    ticket_category_id uuid references categories(id),
+    created_at timestamp with time zone default now(),
+    unique(template_id, ticket_category_id)
+);
+```
+
 ## Additional Considerations
 
 ### Required Indexes
@@ -130,12 +152,16 @@ create table files (
 - `notes(ticket_id)`
 - `files(ticket_id)`
 - `files(message_id)`
+- `templates(template_id)`
+- `template_mappings(ticket_category_id)`
 
 ### Row Level Security (RLS)
 We'll need to implement RLS policies to ensure:
 - Users can only see their own tickets and messages
 - Supporters can see all tickets but only modify their assigned ones
 - Notes are only visible to supporters
+- Templates are only manageable by supporters
+- All supporters can view and use templates
 
 ### Triggers
 We should implement triggers for:

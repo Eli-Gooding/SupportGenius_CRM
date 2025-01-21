@@ -79,6 +79,11 @@ Below is a simplified outline of the **Customer** and **Supporter** workflows wi
        - Shows who made each change (supporter or customer)
        - Includes timestamps for each status change
        - Helps track ticket lifecycle and response times
+     - A **Templates** section provides quick access to:
+       - Category-specific response templates
+       - General-purpose templates
+       - Option to insert template and modify before sending
+       - Ability to create new templates or edit existing ones
    - For **Closed Cases**:
      - The ticket is **read-only**; no new updates can be made.
 
