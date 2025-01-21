@@ -51,6 +51,7 @@ interface Ticket {
     id: string
     full_name: string
     company: {
+      id: string
       company_name: string
     } | null
   } | null
@@ -138,6 +139,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
               id,
               full_name,
               company: companies!company_id (
+                id,
                 company_name
               )
             ),
@@ -309,7 +311,12 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                 </div>
                 <div className="flex items-center">
                   <Building2 className="h-4 w-4 mr-1" />
-                  <span>{ticket.created_by_user?.company?.company_name || 'Unknown'}</span>
+                  <Link 
+                    href={`/account/${ticket.created_by_user?.company?.id}`}
+                    className="hover:text-blue-600 hover:underline"
+                  >
+                    {ticket.created_by_user?.company?.company_name || 'Unknown'}
+                  </Link>
                 </div>
                 <div className="flex items-center">
                   <AlertCircle className="h-4 w-4 mr-1" />
