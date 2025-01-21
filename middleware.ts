@@ -48,6 +48,7 @@ export const config = {
     '/',
     '/login',
     '/signup',
+    '/customer/:path*',
     '/customer-dashboard/:path*',
     '/supporter-dashboard/:path*',
     '/api/auth/:path*',

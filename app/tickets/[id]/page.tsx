@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -47,6 +48,7 @@ interface Ticket {
   created_at: string
   updated_at: string
   created_by_user: {
+    id: string
     full_name: string
     company: {
       company_name: string
@@ -133,6 +135,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           .select(`
             *,
             created_by_user:created_by_user_id (
+              id,
               full_name,
               company:company_id (
                 company_name
@@ -297,7 +300,12 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
               <div className="flex items-center space-x-6 text-sm text-gray-500">
                 <div className="flex items-center">
                   <User className="h-4 w-4 mr-1" />
-                  <span>{ticket.created_by_user?.full_name || 'Unknown'}</span>
+                  <Link 
+                    href={`/customer/${ticket.created_by_user?.id}`}
+                    className="hover:text-blue-600 hover:underline"
+                  >
+                    {ticket.created_by_user?.full_name || 'Unknown'}
+                  </Link>
                 </div>
                 <div className="flex items-center">
                   <Building2 className="h-4 w-4 mr-1" />
