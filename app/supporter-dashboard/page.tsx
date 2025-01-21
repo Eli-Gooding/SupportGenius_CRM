@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlusCircle, Bot, BarChart } from "lucide-react"
+import { PlusCircle, Bot, BarChart, User, Building2, AlertCircle, Calendar } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { RouteCaseDialog } from "@/components/route-case-dialog"
 
@@ -129,21 +129,35 @@ export default function SupporterDashboard() {
                       key={ticket.id}
                       className="hover:bg-gray-50 transition-colors"
                     >
-                      <CardHeader>
-                        <CardTitle className="text-lg flex justify-between">
-                          <span>{ticket.title}</span>
+                      <CardHeader className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-6 flex-grow">
+                            <span className="text-lg font-medium">{ticket.title}</span>
+                            <div className="flex items-center space-x-6 text-sm text-gray-500">
+                              <div className="flex items-center">
+                                <User className="h-4 w-4 mr-1" />
+                                <span>{ticket.created_by_user?.full_name || 'Unknown'}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <Building2 className="h-4 w-4 mr-1" />
+                                <span>{ticket.created_by_user?.company?.company_name || 'Unknown'}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                <span>{ticket.priority || 'Not set'}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <Calendar className="h-4 w-4 mr-1" />
+                                <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
                           <RouteCaseDialog
                             ticketId={ticket.id}
                             onRouteComplete={fetchTickets}
                           />
-                        </CardTitle>
+                        </div>
                       </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-500">Customer: {ticket.created_by_user?.full_name || 'Unknown'}</p>
-                        <p className="text-sm text-gray-500">Company: {ticket.created_by_user?.company?.company_name || 'Unknown'}</p>
-                        <p className="text-sm text-gray-500">Priority: {ticket.priority || 'Not set'}</p>
-                        <p className="text-sm text-gray-500">Created: {new Date(ticket.created_at).toLocaleDateString()}</p>
-                      </CardContent>
                     </Card>
                   ))
                 )}
@@ -165,16 +179,29 @@ export default function SupporterDashboard() {
                       className="cursor-pointer hover:bg-gray-50 transition-colors"
                       onClick={() => handleTicketClick(ticket.id)}
                     >
-                      <CardHeader>
-                        <CardTitle className="text-lg">{ticket.title}</CardTitle>
+                      <CardHeader className="p-4">
+                        <div className="flex items-center space-x-6">
+                          <span className="text-lg font-medium">{ticket.title}</span>
+                          <div className="flex items-center space-x-6 text-sm text-gray-500">
+                            <div className="flex items-center">
+                              <User className="h-4 w-4 mr-1" />
+                              <span>{ticket.created_by_user?.full_name || 'Unknown'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Building2 className="h-4 w-4 mr-1" />
+                              <span>{ticket.created_by_user?.company?.company_name || 'Unknown'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              <span>{ticket.priority || 'Not set'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-1" />
+                              <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
                       </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-500">Customer: {ticket.created_by_user?.full_name || 'Unknown'}</p>
-                        <p className="text-sm text-gray-500">Company: {ticket.created_by_user?.company?.company_name || 'Unknown'}</p>
-                        <p className="text-sm text-gray-500">Status: {ticket.ticket_status}</p>
-                        <p className="text-sm text-gray-500">Priority: {ticket.priority || 'Not set'}</p>
-                        <p className="text-sm text-gray-500">Created: {new Date(ticket.created_at).toLocaleDateString()}</p>
-                      </CardContent>
                     </Card>
                   ))
                 )}
