@@ -6,8 +6,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createClient } from "@/lib/supabase"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { createClient } from "@/lib/supabase/client"
 
 export default function Login() {
   const [email, setEmail] = useState("")
@@ -17,28 +17,48 @@ export default function Login() {
   const router = useRouter()
   const supabase = createClient()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
     setIsLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // Temporary: Skip authentication and redirect directly to supporter dashboard
+      router.replace('/supporter-dashboard')
+      
+      /* Comment out authentication logic for now
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        setError("Invalid login credentials")
-        return
+      if (signInError) throw signInError
+      if (!authData.session) throw new Error('No session created')
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: authData.session.access_token,
+        refresh_token: authData.session.refresh_token,
+      })
+
+      if (sessionError) throw sessionError
+
+      const response = await fetch('/api/auth/protected', {
+        headers: {
+          'Authorization': `Bearer ${authData.session.access_token}`
+        }
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error checking user type')
       }
 
-      if (data?.user) {
-        router.push("/dashboard")
-        router.refresh()
-      }
-    } catch (err) {
-      setError("An error occurred during login")
+      const redirectPath = result.isSupporter ? '/supporter-dashboard' : '/customer-dashboard'
+      router.replace(redirectPath)
+      */
+    } catch (error) {
+      console.error('Login error:', error)
+      setError(error instanceof Error ? error.message : 'An error occurred during login')
     } finally {
       setIsLoading(false)
     }

@@ -7,7 +7,7 @@ This document outlines the database schema for the AutoCRM ticketing system.
 ### Users (Customers)
 ```sql
 create table users (
-    id uuid default uuid_generate_v4() primary key,
+    id uuid primary key references auth.users(id),
     email text unique not null,
     full_name text not null,
     company_id uuid references companies(id),
@@ -28,7 +28,7 @@ create table companies (
 ### Supporters
 ```sql
 create table supporters (
-    id uuid default uuid_generate_v4() primary key,
+    id uuid primary key references auth.users(id),
     email text unique not null,
     full_name text not null,
     created_at timestamp with time zone default now(),
@@ -157,11 +157,18 @@ create table template_mappings (
 
 ### Row Level Security (RLS)
 We'll need to implement RLS policies to ensure:
-- Users can only see their own tickets and messages
+- Users can only see their own tickets and messages (using auth.uid() = id)
 - Supporters can see all tickets but only modify their assigned ones
 - Notes are only visible to supporters
 - Templates are only manageable by supporters
 - All supporters can view and use templates
+- Service role operations are allowed for system-level operations
+
+### Authentication
+- Both users and supporters tables use Supabase auth IDs as their primary keys
+- This ensures proper integration with the auth system and RLS policies
+- The id field in both tables references auth.users(id)
+- This allows for proper user authentication and authorization using auth.uid()
 
 ### Triggers
 We should implement triggers for:

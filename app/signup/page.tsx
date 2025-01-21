@@ -1,34 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createClient } from "@/lib/supabase"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useCompanies } from "@/hooks/use-companies"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { createClient } from "@/lib/supabase/client"
 
 export default function Signup() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [fullName, setFullName] = useState("")
-  const [open, setOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCompany, setSelectedCompany] = useState<string>("")
-  const [companyPassword, setCompanyPassword] = useState("")
-  const [showCompanyPassword, setShowCompanyPassword] = useState(false)
+  const [isSupporter, setIsSupporter] = useState(false)
+  const [companyId, setCompanyId] = useState("")
+  const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([])
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [isEmailSent, setIsEmailSent] = useState(false)
   const router = useRouter()
   const supabase = createClient()
-  const { companies, isLoading: isLoadingCompanies, error: companiesError } = useCompanies(searchTerm)
+
+  // Fetch companies on component mount
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        console.log('Fetching companies...')
+        const { data, error } = await supabase
+          .from('companies')
+          .select('id, company_name')
+          .order('company_name')
+
+        console.log('Raw response:', { data, error })
+
+        if (error) {
+          console.error('Error fetching companies:', error)
+          setError('Failed to load companies. Please try again later.')
+          return
+        }
+
+        if (!data || data.length === 0) {
+          console.warn('No companies found in the database')
+          setError('No companies available. Please contact support.')
+          return
+        }
+
+        // Map the data to match our expected format
+        const formattedCompanies = data.map(company => ({
+          id: company.id,
+          name: company.company_name
+        }))
+
+        console.log('Formatted companies:', formattedCompanies)
+        setCompanies(formattedCompanies)
+      } catch (err) {
+        console.error('Unexpected error fetching companies:', err)
+        setError('An unexpected error occurred. Please try again later.')
+      }
+    }
+
+    fetchCompanies()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,129 +69,44 @@ export default function Signup() {
     setIsLoading(true)
 
     try {
-      // Validate company selection
-      if (!selectedCompany) {
-        setError("Please select a company")
-        setIsLoading(false)
-        return
-      }
-
-      // Validate Gauntlet AI password if selected
-      if (showCompanyPassword && companyPassword !== "password") {
-        setError("Invalid company password")
-        setIsLoading(false)
-        return
-      }
-
-      // Sign up with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Sign up the user
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             full_name: fullName,
-            is_supporter: showCompanyPassword && companyPassword === "password"
-          }
-        }
+            is_supporter: isSupporter,
+            company_id: !isSupporter ? companyId : null,
+          },
+        },
       })
 
-      if (authError) {
-        setError(authError.message)
+      if (signUpError) {
+        setError(signUpError.message)
         return
       }
 
-      if (authData?.user) {
-        // Get company ID
-        const selectedCompanyData = companies.find(c => c.company_name === selectedCompany)
-        
-        if (showCompanyPassword && companyPassword === "password") {
-          // Create supporter record
-          const { error: supporterError } = await supabase
-            .from('supporters')
-            .insert([
-              {
-                id: authData.user.id,
-                email: email,
-                full_name: fullName
-              }
-            ])
-
-          if (supporterError) {
-            setError("Error creating supporter account")
-            return
-          }
-        } else {
-          // Create user record
-          const { error: userError } = await supabase
-            .from('users')
-            .insert([
-              {
-                id: authData.user.id,
-                email: email,
-                full_name: fullName,
-                company_id: selectedCompanyData?.id
-              }
-            ])
-
-          if (userError) {
-            setError("Error creating user account")
-            return
-          }
-        }
-
-        setIsEmailSent(true)
-      }
+      // Redirect to confirmation pending page
+      router.push("/auth/confirmation-pending")
     } catch (err) {
-      setError("An error occurred during signup")
+      console.error("Signup error:", err)
+      setError("An unexpected error occurred during signup")
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // Update showCompanyPassword when company selection changes
-  const handleCompanySelect = (companyName: string) => {
-    console.log('handleCompanySelect called with:', companyName)
-    setSelectedCompany(companyName)
-    setShowCompanyPassword(companyName === "Gauntlet AI")
-    setOpen(false)
-    setSearchTerm("")
-  }
-
-  if (isEmailSent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Check your email</h2>
-            <p className="mt-2 text-center text-sm text-gray-600">
-              We've sent you a confirmation email. Please click the link in the email to verify your account.
-            </p>
-            <p className="mt-4 text-center text-sm text-gray-500">
-              Didn't receive the email? Check your spam folder or{" "}
-              <button 
-                onClick={handleSubmit} 
-                className="font-medium text-blue-600 hover:text-blue-500"
-                disabled={isLoading}
-              >
-                click here to resend
-              </button>
-            </p>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Create a new account</h2>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Create your account</h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{" "}
             <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-              sign in to your account
+              sign in to your existing account
             </Link>
           </p>
         </div>
@@ -167,150 +115,87 @@ export default function Signup() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {companiesError && (
-          <Alert variant="destructive">
-            <AlertDescription>Error loading companies: {companiesError}</AlertDescription>
-          </Alert>
-        )}
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
+          <div className="rounded-md shadow-sm space-y-4">
             <div>
-              <Label htmlFor="full-name" className="sr-only">
-                Full Name
-              </Label>
-              <Input
-                id="full-name"
-                name="fullName"
-                type="text"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Full Name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-            <div className="flex flex-col space-y-1.5">
-              <Label htmlFor="company" className="sr-only">
-                Company
-              </Label>
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="justify-between"
-                    disabled={isLoading}
-                    onClick={() => {
-                      console.log('Popover button clicked')
-                      setOpen(true)
-                    }}
-                  >
-                    {selectedCompany || "Select company..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-full p-0">
-                  <Command>
-                    <CommandInput 
-                      placeholder="Search company..." 
-                      value={searchTerm}
-                      onValueChange={(value) => {
-                        console.log('Search term changed:', value)
-                        setSearchTerm(value)
-                      }}
-                    />
-                    <CommandList>
-                      {isLoadingCompanies ? (
-                        <div className="flex items-center justify-center p-4">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        </div>
-                      ) : (
-                        <>
-                          <CommandEmpty>No company found.</CommandEmpty>
-                          <CommandGroup>
-                            {companies.map((company) => {
-                              console.log('Rendering company:', company.company_name)
-                              return (
-                                <CommandItem
-                                  key={company.id}
-                                  value={company.company_name}
-                                  onSelect={(currentValue) => {
-                                    console.log('CommandItem onSelect called with:', currentValue)
-                                    handleCompanySelect(company.company_name)
-                                  }}
-                                  className="cursor-pointer hover:bg-accent"
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      selectedCompany === company.company_name ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  {company.company_name}
-                                </CommandItem>
-                              )
-                            })}
-                          </CommandGroup>
-                        </>
-                      )}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-            {showCompanyPassword && (
-              <div>
-                <Label htmlFor="company-password" className="sr-only">
-                  Company Password
-                </Label>
-                <Input
-                  id="company-password"
-                  name="companyPassword"
-                  type="password"
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Company Password"
-                  value={companyPassword}
-                  onChange={(e) => setCompanyPassword(e.target.value)}
-                  disabled={isLoading}
-                />
-              </div>
-            )}
-            <div>
-              <Label htmlFor="email-address" className="sr-only">
-                Email address
-              </Label>
+              <Label htmlFor="email-address">Email address</Label>
               <Input
                 id="email-address"
                 name="email"
                 type="email"
                 autoComplete="email"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
               />
             </div>
             <div>
-              <Label htmlFor="password" className="sr-only">
-                Password
-              </Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete="new-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
               />
             </div>
+            <div>
+              <Label htmlFor="full-name">Full Name</Label>
+              <Input
+                id="full-name"
+                name="full_name"
+                type="text"
+                autoComplete="name"
+                required
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div>
+              <Label htmlFor="user-type">Account Type</Label>
+              <Select
+                value={isSupporter ? "supporter" : "customer"}
+                onValueChange={(value) => setIsSupporter(value === "supporter")}
+                disabled={isLoading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select account type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="customer">Customer</SelectItem>
+                  <SelectItem value="supporter">Support Agent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {!isSupporter && (
+              <div>
+                <Label htmlFor="company">Company</Label>
+                <Select
+                  value={companyId}
+                  onValueChange={setCompanyId}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select your company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -319,7 +204,7 @@ export default function Signup() {
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               disabled={isLoading}
             >
-              {isLoading ? "Creating account..." : "Sign up"}
+              {isLoading ? "Creating account..." : "Create account"}
             </Button>
           </div>
         </form>

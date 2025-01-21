@@ -3,10 +3,31 @@ create policy "Users can view their own profile"
     on users for select
     using (auth.uid() = id);
 
+create policy "Enable insert for authenticated users during signup"
+    on users for insert
+    with check (auth.uid() = id);
+
+create policy "Enable service role operations on users"
+    on users for all
+    using (auth.role() = 'service_role');
+
 -- Supporters table policies
-create policy "Supporters can view all supporters"
+create policy "Allow public read access to supporters"
     on supporters for select
-    using (auth.uid() in (select id from supporters));
+    using (true);
+
+create policy "Enable insert for authenticated users during signup"
+    on supporters for insert
+    with check (auth.uid() = id);
+
+create policy "Supporters can update their own record"
+    on supporters for update
+    using (auth.uid() = id)
+    with check (auth.uid() = id);
+
+create policy "Enable service role operations on supporters"
+    on supporters for all
+    using (auth.role() = 'service_role');
 
 -- Tickets table policies
 create policy "Users can view their own tickets"

@@ -10,7 +10,7 @@ create table companies (
 
 -- Users (Customers) table
 create table users (
-    id uuid default uuid_generate_v4() primary key,
+    id uuid primary key references auth.users(id),
     email text unique not null,
     full_name text not null,
     company_id uuid references companies(id),
@@ -20,7 +20,7 @@ create table users (
 
 -- Supporters table
 create table supporters (
-    id uuid default uuid_generate_v4() primary key,
+    id uuid primary key references auth.users(id),
     email text unique not null,
     full_name text not null,
     created_at timestamp with time zone default now(),
@@ -129,6 +129,25 @@ create index idx_files_message_id on files(message_id);
 create index idx_template_mappings_ticket_category_id on template_mappings(ticket_category_id);
 
 -- Enable Row Level Security (RLS)
+alter table companies enable row level security;
+
+-- Add RLS policies
+create policy "Allow public read access to companies"
+    on companies for select
+    to public
+    using (true);
+
+-- Add RLS policies for supporters
+create policy "Allow public read access to supporters for auth"
+    on supporters for select
+    to public
+    using (true);
+
+create policy "Allow supporters to update their own record"
+    on supporters for update
+    using (auth.uid() = id)
+    with check (auth.uid() = id);
+
 alter table users enable row level security;
 alter table supporters enable row level security;
 alter table tickets enable row level security;
