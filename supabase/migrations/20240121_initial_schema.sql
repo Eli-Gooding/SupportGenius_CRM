@@ -130,6 +130,14 @@ create index idx_template_mappings_ticket_category_id on template_mappings(ticke
 
 -- Enable Row Level Security (RLS)
 alter table companies enable row level security;
+alter table users enable row level security;
+alter table supporters enable row level security;
+alter table tickets enable row level security;
+alter table messages enable row level security;
+alter table notes enable row level security;
+alter table files enable row level security;
+alter table templates enable row level security;
+alter table template_mappings enable row level security;
 
 -- Add RLS policies
 create policy "Allow public read access to companies"
@@ -147,15 +155,6 @@ create policy "Allow supporters to update their own record"
     on supporters for update
     using (auth.uid() = id)
     with check (auth.uid() = id);
-
-alter table users enable row level security;
-alter table supporters enable row level security;
-alter table tickets enable row level security;
-alter table messages enable row level security;
-alter table notes enable row level security;
-alter table files enable row level security;
-alter table templates enable row level security;
-alter table template_mappings enable row level security;
 
 -- Create trigger function for updating ticket updated_at
 create or replace function update_ticket_updated_at()

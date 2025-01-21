@@ -148,4 +148,19 @@ create policy "Supporters can view template mappings"
 create policy "Supporters can manage template mappings"
     on template_mappings for all
     using (auth.uid() in (select id from supporters))
-    with check (auth.uid() in (select id from supporters)); 
+    with check (auth.uid() in (select id from supporters));
+
+-- Companies table policies
+create policy "Supporters can view all companies"
+    on companies for select
+    using (auth.uid() in (select id from supporters));
+
+create policy "Users can view their own company"
+    on companies for select
+    using (id in (
+        select company_id from users where id = auth.uid()
+    ));
+
+create policy "Enable service role operations on companies"
+    on companies for all
+    using (auth.role() = 'service_role'); 

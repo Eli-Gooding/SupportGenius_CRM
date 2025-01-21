@@ -134,14 +134,14 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           .from('tickets')
           .select(`
             *,
-            created_by_user:created_by_user_id (
+            created_by_user: users!created_by_user_id (
               id,
               full_name,
-              company:company_id (
+              company: companies!company_id (
                 company_name
               )
             ),
-            assigned_to_supporter:assigned_to_supporter_id (
+            assigned_to_supporter: supporters!assigned_to_supporter_id (
               full_name
             )
           `)

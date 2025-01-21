@@ -49,4 +49,27 @@ drop table if exists users;
 drop table if exists companies;
 
 -- Drop any remaining extensions (optional, uncomment if needed)
--- drop extension if exists "uuid-ossp"; 
+-- drop extension if exists "uuid-ossp";
+
+-- Drop existing policies
+drop policy if exists "Supporters can view all companies" on companies;
+drop policy if exists "Users can view their own company" on companies;
+drop policy if exists "Enable service role operations on companies" on companies;
+
+-- Reapply RLS
+alter table companies enable row level security;
+
+-- Reapply policies
+create policy "Supporters can view all companies"
+    on companies for select
+    using (auth.uid() in (select id from supporters));
+
+create policy "Users can view their own company"
+    on companies for select
+    using (id in (
+        select company_id from users where id = auth.uid()
+    ));
+
+create policy "Enable service role operations on companies"
+    on companies for all
+    using (auth.role() = 'service_role'); 
