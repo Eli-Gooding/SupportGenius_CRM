@@ -59,7 +59,7 @@ function TicketList({
   emptyMessage: string
   onTicketClick?: (ticketId: string) => void
 }) {
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'updated_at', direction: 'desc' })
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'created_at', direction: 'desc' })
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [showFilters, setShowFilters] = useState(false)
   
@@ -311,6 +311,7 @@ export default function SupporterDashboard() {
   const [activeTickets, setActiveTickets] = useState<Ticket[]>([])
   const [closedTickets, setClosedTickets] = useState<Ticket[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -436,51 +437,24 @@ export default function SupporterDashboard() {
 
           <TabsContent value="unclaimed">
             <ScrollArea className="h-[calc(100vh-250px)] rounded-md border">
-              <div className="p-4 space-y-4">
-                {isLoading ? (
-                  <p className="text-center text-gray-500">Loading tickets...</p>
-                ) : unclaimedCases.length === 0 ? (
-                  <p className="text-center text-gray-500">No unclaimed cases</p>
-                ) : (
-                  unclaimedCases.map((ticket) => (
-                    <Card
-                      key={ticket.id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <CardHeader className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-6 flex-grow">
-                            <span className="text-lg font-medium">{ticket.title}</span>
-                            <div className="flex items-center space-x-6 text-sm text-gray-500">
-                              <div className="flex items-center">
-                                <User className="h-4 w-4 mr-1" />
-                                <span>{ticket.created_by_user?.full_name || 'Unknown'}</span>
-                              </div>
-                              <div className="flex items-center">
-                                <Building2 className="h-4 w-4 mr-1" />
-                                <span>{ticket.created_by_user?.company?.company_name || 'Unknown'}</span>
-                              </div>
-                              <div className="flex items-center">
-                                <AlertCircle className="h-4 w-4 mr-1" />
-                                <span>{ticket.priority || 'Not set'}</span>
-                              </div>
-                              <div className="flex items-center">
-                                <Calendar className="h-4 w-4 mr-1" />
-                                <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <RouteCaseDialog
-                            ticketId={ticket.id}
-                            onRouteComplete={fetchTickets}
-                          />
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  ))
-                )}
+              <div className="p-4">
+                <TicketList
+                  tickets={unclaimedCases}
+                  isLoading={isLoading}
+                  emptyMessage="No unclaimed cases"
+                  onTicketClick={setSelectedTicketId}
+                />
               </div>
             </ScrollArea>
+            {selectedTicketId && (
+              <RouteCaseDialog
+                ticketId={selectedTicketId}
+                onRouteComplete={() => {
+                  setSelectedTicketId(null)
+                  fetchTickets()
+                }}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="my-cases">
