@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlusCircle, Bot, BarChart, User, Building2, AlertCircle, Calendar } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { RouteCaseDialog } from "@/components/route-case-dialog"
+import { GlobalSearch } from "@/components/global-search"
 
 interface Ticket {
   id: string
@@ -96,16 +97,19 @@ export default function SupporterDashboard() {
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-semibold text-gray-900">Supporter Dashboard</h1>
-          <div className="flex space-x-2">
-            <Button
-              variant="outline"
-              className="flex items-center"
-              onClick={() => router.push("/overview")}
-            >
-              <BarChart className="mr-2 h-4 w-4" /> View Analytics
-            </Button>
+        <div className="flex flex-col space-y-4 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h1 className="text-3xl font-semibold text-gray-900">Supporter Dashboard</h1>
+            <div className="flex items-center gap-4 w-full sm:w-auto">
+              <GlobalSearch />
+              <Button
+                variant="outline"
+                className="flex items-center whitespace-nowrap"
+                onClick={() => router.push("/overview")}
+              >
+                <BarChart className="mr-2 h-4 w-4" /> View Analytics
+              </Button>
+            </div>
           </div>
         </div>
 
