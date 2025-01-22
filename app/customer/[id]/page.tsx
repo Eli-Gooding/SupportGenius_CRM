@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
-import { User, Building2, Calendar, Clock } from "lucide-react"
+import { User, Building2, Calendar, Clock, Copy, Check } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { GlobalSearch } from "@/components/global-search"
 
 interface CustomerTicket {
   id: string
@@ -24,6 +26,7 @@ interface CustomerInfo {
   created_at: string
   last_login: string | null
   company: {
+    id: string
     company_name: string
   } | null
 }
@@ -32,9 +35,21 @@ export default function CustomerInfo({ params }: { params: { id: string } }) {
   const [customer, setCustomer] = useState<CustomerInfo | null>(null)
   const [tickets, setTickets] = useState<CustomerTicket[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isCopied, setIsCopied] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const { toast } = useToast()
+
+  const handleCopyLink = () => {
+    const url = window.location.href
+    navigator.clipboard.writeText(url)
+    setIsCopied(true)
+    setTimeout(() => setIsCopied(false), 2000)
+    toast({
+      title: "Link copied",
+      description: "Customer page link has been copied to clipboard",
+    })
+  }
 
   useEffect(() => {
     const fetchCustomerInfo = async () => {
@@ -45,6 +60,7 @@ export default function CustomerInfo({ params }: { params: { id: string } }) {
           .select(`
             *,
             company:company_id (
+              id,
               company_name
             )
           `)
@@ -107,11 +123,32 @@ export default function CustomerInfo({ params }: { params: { id: string } }) {
 
   return (
     <div className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="flex justify-between items-center mb-4">
+        <Button variant="outline" onClick={() => router.back()}>
+          Back
+        </Button>
+        <GlobalSearch />
+      </div>
+
       <Card>
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
-              <CardTitle className="text-2xl mb-4">{customer.full_name}</CardTitle>
+              <div className="flex items-center gap-2 mb-4">
+                <CardTitle className="text-2xl">{customer.full_name}</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCopyLink}
+                  className="ml-1"
+                >
+                  {isCopied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
               <div className="space-y-2">
                 <div className="flex items-center text-sm text-gray-500">
                   <User className="h-4 w-4 mr-2" />
@@ -121,7 +158,16 @@ export default function CustomerInfo({ params }: { params: { id: string } }) {
                 <div className="flex items-center text-sm text-gray-500">
                   <Building2 className="h-4 w-4 mr-2" />
                   <span className="font-medium mr-2">Company:</span>
-                  <span>{customer.company?.company_name || 'Not specified'}</span>
+                  {customer.company ? (
+                    <Link 
+                      href={`/account/${customer.company.id}`}
+                      className="hover:text-blue-600 hover:underline"
+                    >
+                      {customer.company.company_name}
+                    </Link>
+                  ) : (
+                    <span>Not specified</span>
+                  )}
                 </div>
                 <div className="flex items-center text-sm text-gray-500">
                   <Calendar className="h-4 w-4 mr-2" />
@@ -192,11 +238,6 @@ export default function CustomerInfo({ params }: { params: { id: string } }) {
           </div>
         </CardContent>
       </Card>
-      <div className="mt-4">
-        <Button variant="outline" onClick={() => router.back()}>
-          Back
-        </Button>
-      </div>
     </div>
   )
 } 

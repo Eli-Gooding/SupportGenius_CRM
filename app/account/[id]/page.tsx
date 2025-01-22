@@ -6,9 +6,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
-import { Building2, Calendar, User, Ticket } from "lucide-react"
+import { Building2, Calendar, User, Ticket, Copy, Check } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { GlobalSearch } from "@/components/global-search"
 
 interface CompanyInfo {
   id: string
@@ -44,9 +45,21 @@ export default function AccountInfo({ params }: { params: { id: string } }) {
   const [employees, setEmployees] = useState<CompanyEmployee[]>([])
   const [tickets, setTickets] = useState<CompanyTicket[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isCopied, setIsCopied] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const { toast } = useToast()
+
+  const handleCopyLink = () => {
+    const url = window.location.href
+    navigator.clipboard.writeText(url)
+    setIsCopied(true)
+    setTimeout(() => setIsCopied(false), 2000)
+    toast({
+      title: "Link copied",
+      description: "Company page link has been copied to clipboard",
+    })
+  }
 
   useEffect(() => {
     const fetchAccountInfo = async () => {
@@ -98,7 +111,7 @@ export default function AccountInfo({ params }: { params: { id: string } }) {
           .order('created_at', { ascending: false })
 
         if (ticketsError) throw ticketsError
-        setTickets(ticketsData as CompanyTicket[])
+        setTickets(ticketsData as unknown as CompanyTicket[])
 
       } catch (error) {
         console.error('Error fetching account info:', error)
@@ -136,8 +149,28 @@ export default function AccountInfo({ params }: { params: { id: string } }) {
 
   return (
     <div className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">{company.company_name}</h1>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => router.back()}>
+            Back
+          </Button>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold">{company.company_name}</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyLink}
+              className="ml-1"
+            >
+              {isCopied ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+        <GlobalSearch />
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
@@ -270,12 +303,6 @@ export default function AccountInfo({ params }: { params: { id: string } }) {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <div className="mt-4">
-        <Button variant="outline" onClick={() => router.back()}>
-          Back
-        </Button>
-      </div>
     </div>
   )
 } 
