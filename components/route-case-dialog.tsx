@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,9 +22,10 @@ import { useToast } from "@/components/ui/use-toast"
 interface RouteCaseDialogProps {
   ticketId: string
   onRouteComplete: () => void
+  showTrigger?: boolean
 }
 
-export function RouteCaseDialog({ ticketId, onRouteComplete }: RouteCaseDialogProps) {
+export function RouteCaseDialog({ ticketId, onRouteComplete, showTrigger = false }: RouteCaseDialogProps) {
   const [selectedQueue, setSelectedQueue] = useState<string>("")
   const [selectedSupporter, setSelectedSupporter] = useState<string>("")
   const [queues, setQueues] = useState<Array<{ id: string; category_name: string }>>([])
@@ -33,6 +34,14 @@ export function RouteCaseDialog({ ticketId, onRouteComplete }: RouteCaseDialogPr
   const [isOpen, setIsOpen] = useState(false)
   const supabase = createClient()
   const { toast } = useToast()
+
+  // Open dialog and fetch data when ticketId changes
+  useEffect(() => {
+    if (ticketId) {
+      setIsOpen(true)
+      handleDialogOpen(true)
+    }
+  }, [ticketId])
 
   // Fetch queues and supporters when dialog opens
   const handleDialogOpen = async (open: boolean) => {
@@ -159,9 +168,11 @@ export function RouteCaseDialog({ ticketId, onRouteComplete }: RouteCaseDialogPr
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogOpen}>
-      <DialogTrigger asChild>
-        <Button>Route Case</Button>
-      </DialogTrigger>
+      {showTrigger && (
+        <DialogTrigger asChild>
+          <Button>Route Case</Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Route Case</DialogTitle>

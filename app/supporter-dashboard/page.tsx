@@ -52,16 +52,21 @@ function TicketList({
   tickets, 
   isLoading, 
   emptyMessage, 
-  onTicketClick 
+  onTicketClick,
+  showRouteButton = false,
+  onRouteClick
 }: { 
   tickets: Ticket[]
   isLoading: boolean
   emptyMessage: string
   onTicketClick?: (ticketId: string) => void
+  showRouteButton?: boolean
+  onRouteClick?: (ticketId: string) => void
 }) {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'created_at', direction: 'desc' })
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   
   const getSortValue = (ticket: Ticket, field: SortConfig['field']) => {
     switch (field) {
@@ -146,7 +151,17 @@ function TicketList({
         >
           {showFilters ? 'Hide Filters' : 'Show Filters'}
         </Button>
-        {filterConfig.priority?.length || filterConfig.ticket_status?.length || filterConfig.category?.length ? (
+        {showRouteButton && selectedTicketId && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onRouteClick?.(selectedTicketId)}
+            className="mb-2"
+          >
+            Route Selected Case
+          </Button>
+        )}
+        {(filterConfig.priority?.length || filterConfig.ticket_status?.length || filterConfig.category?.length) ? (
           <Button
             variant="ghost"
             size="sm"
@@ -214,7 +229,8 @@ function TicketList({
       )}
 
       <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-50 rounded-t-md font-medium text-sm">
-        <div className="col-span-3 cursor-pointer flex items-center gap-1" onClick={() => handleSort('title')}>
+        <div className="col-span-1"></div>
+        <div className="col-span-2 cursor-pointer flex items-center gap-1" onClick={() => handleSort('title')}>
           Title
           {sortConfig.field === 'title' && (
             sortConfig.direction === 'asc' ? <ArrowUpIcon className="h-4 w-4" /> : <ArrowDownIcon className="h-4 w-4" />
@@ -260,12 +276,27 @@ function TicketList({
       {sortedAndFilteredTickets.map((ticket) => (
         <Card
           key={ticket.id}
-          className={`cursor-pointer hover:bg-gray-50 transition-colors ${onTicketClick ? 'cursor-pointer' : ''}`}
-          onClick={() => onTicketClick?.(ticket.id)}
+          className={`hover:bg-gray-50 transition-colors`}
         >
           <CardHeader className="p-4">
             <div className="grid grid-cols-12 gap-4 items-center">
-              <div className="col-span-3 font-medium truncate">{ticket.title}</div>
+              <div className="col-span-1">
+                <input
+                  type="checkbox"
+                  checked={selectedTicketId === ticket.id}
+                  onChange={(e) => {
+                    setSelectedTicketId(e.target.checked ? ticket.id : null);
+                  }}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div 
+                className={`col-span-2 font-medium truncate ${onTicketClick ? 'cursor-pointer' : ''}`}
+                onClick={() => onTicketClick?.(ticket.id)}
+              >
+                {ticket.title}
+              </div>
               <div className="col-span-2 text-sm text-gray-500 truncate">
                 {ticket.created_by_user?.full_name || 'Unknown'}
               </div>
@@ -442,7 +473,9 @@ export default function SupporterDashboard() {
                   tickets={unclaimedCases}
                   isLoading={isLoading}
                   emptyMessage="No unclaimed cases"
-                  onTicketClick={setSelectedTicketId}
+                  onTicketClick={handleTicketClick}
+                  showRouteButton={true}
+                  onRouteClick={setSelectedTicketId}
                 />
               </div>
             </ScrollArea>
@@ -453,6 +486,7 @@ export default function SupporterDashboard() {
                   setSelectedTicketId(null)
                   fetchTickets()
                 }}
+                showTrigger={false}
               />
             )}
           </TabsContent>
