@@ -320,10 +320,6 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                     {ticket.created_by_user?.company?.company_name || 'Unknown'}
                   </Link>
                 </div>
-                <div className="flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  <span>Priority: {ticket.priority || 'Not set'}</span>
-                </div>
               </div>
               <div className="flex items-center space-x-6 text-sm text-gray-500 mt-2">
                 <div className="flex items-center">
