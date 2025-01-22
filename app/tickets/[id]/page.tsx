@@ -42,17 +42,20 @@ interface Note {
   }
 }
 
-interface File {
+interface FileRecord {
   id: string
   file_name: string
   file_size: number
   mime_type: string
+  storage_path: string
   created_at: string
   uploaded_by_type: 'user' | 'supporter'
-  uploaded_by: {
-    id: string
-    full_name: string
-  }
+  uploaded_by_id: string
+}
+
+interface UserRecord {
+  id: string
+  full_name: string
 }
 
 interface Message {
@@ -64,6 +67,20 @@ interface Message {
     id: string
     full_name: string
   } | null
+}
+
+interface TicketFile {
+  id: string
+  file_name: string
+  file_size: number
+  mime_type: string
+  storage_path: string
+  created_at: string
+  uploaded_by_type: 'user' | 'supporter'
+  uploaded_by: {
+    id: string
+    full_name: string
+  }
 }
 
 interface Ticket {
@@ -91,9 +108,10 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [notes, setNotes] = useState<Note[]>([])
-  const [files, setFiles] = useState<File[]>([])
+  const [files, setFiles] = useState<TicketFile[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [newNote, setNewNote] = useState({ title: "", content: "" })
+  const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -184,17 +202,69 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
 
   const fetchFiles = async () => {
     try {
+      // First get all files
       const { data: files, error } = await supabase
         .from('files')
         .select(`
-          *,
-          uploaded_by:uploaded_by_id(id, full_name)
+          id,
+          file_name,
+          file_size,
+          mime_type,
+          storage_path,
+          created_at,
+          uploaded_by_type,
+          uploaded_by_id
         `)
         .eq('ticket_id', params.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setFiles(files)
+
+      const fileRecords = files as FileRecord[]
+
+      // Get unique uploader IDs grouped by type
+      const supporterIds = [...new Set(fileRecords.filter(f => f.uploaded_by_type === 'supporter').map(f => f.uploaded_by_id))]
+      const userIds = [...new Set(fileRecords.filter(f => f.uploaded_by_type === 'user').map(f => f.uploaded_by_id))]
+
+      // Fetch supporters if needed
+      let supporterMap = new Map<string, UserRecord>()
+      if (supporterIds.length > 0) {
+        const { data: supporters, error: supportersError } = await supabase
+          .from('supporters')
+          .select('id, full_name')
+          .in('id', supporterIds)
+
+        if (supportersError) throw supportersError
+        supporterMap = new Map((supporters as UserRecord[])?.map(s => [s.id, s]))
+      }
+
+      // Fetch users if needed
+      let userMap = new Map<string, UserRecord>()
+      if (userIds.length > 0) {
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id, full_name')
+          .in('id', userIds)
+
+        if (usersError) throw usersError
+        userMap = new Map((users as UserRecord[])?.map(u => [u.id, u]))
+      }
+
+      // Transform the data to match our TicketFile interface
+      const transformedFiles: TicketFile[] = fileRecords.map(file => ({
+        id: file.id,
+        file_name: file.file_name,
+        file_size: file.file_size,
+        mime_type: file.mime_type,
+        storage_path: file.storage_path,
+        created_at: file.created_at,
+        uploaded_by_type: file.uploaded_by_type,
+        uploaded_by: file.uploaded_by_type === 'supporter'
+          ? supporterMap.get(file.uploaded_by_id) || { id: file.uploaded_by_id, full_name: 'Unknown' }
+          : userMap.get(file.uploaded_by_id) || { id: file.uploaded_by_id, full_name: 'Unknown' }
+      }))
+
+      setFiles(transformedFiles)
     } catch (error) {
       console.error('Error fetching files:', error)
       toast({
@@ -396,9 +466,15 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
     }
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (file) {
+      setSelectedFile(file)
+    }
+  }
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) return
 
     setIsSending(true)
     try {
@@ -406,11 +482,13 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
       if (userError) throw userError
 
       // Upload file to storage
-      const fileExt = file.name.split('.').pop()
+      const fileExt = selectedFile.name.split('.').pop()
       const fileName = `${params.id}/${Date.now()}.${fileExt}`
       const { error: uploadError } = await supabase.storage
         .from('ticket-files')
-        .upload(fileName, file)
+        .upload(fileName, selectedFile, {
+          contentType: selectedFile.type
+        })
 
       if (uploadError) throw uploadError
 
@@ -419,9 +497,9 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
         .from('files')
         .insert({
           ticket_id: params.id,
-          file_name: file.name,
-          file_size: file.size,
-          mime_type: file.type,
+          file_name: selectedFile.name,
+          file_size: selectedFile.size,
+          mime_type: selectedFile.type,
           storage_path: fileName,
           uploaded_by_type: 'supporter',
           uploaded_by_id: userData.user.id,
@@ -430,6 +508,11 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
       if (fileError) throw fileError
 
       await fetchFiles()
+      setSelectedFile(null)
+      // Clear the file input
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement
+      if (fileInput) fileInput.value = ''
+      
       toast({
         title: "File uploaded",
         description: "Your file has been uploaded successfully.",
@@ -443,6 +526,39 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
       })
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleFileDownload = async (file: TicketFile) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('ticket-files')
+        .download(file.storage_path)
+
+      if (error) throw error
+
+      // Create a blob URL and trigger download
+      const blob = new Blob([data], { type: file.mime_type })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.file_name
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Success",
+        description: "File download started.",
+      })
+    } catch (error) {
+      console.error('Error downloading file:', error)
+      toast({
+        title: "Error",
+        description: "Failed to download file. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -694,14 +810,20 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                 <Label htmlFor="file-upload" className="block text-sm font-medium text-gray-700">
                   Upload New File
                 </Label>
-                <div className="mt-1 flex items-center">
+                <div className="mt-1 flex items-center space-x-2">
                   <Input
                     id="file-upload"
                     type="file"
-                    onChange={handleFileUpload}
+                    onChange={handleFileSelect}
                     disabled={isSending}
                     className="flex-grow"
                   />
+                  <Button 
+                    onClick={handleFileUpload}
+                    disabled={isSending || !selectedFile}
+                  >
+                    {isSending ? "Uploading..." : "Upload"}
+                  </Button>
                 </div>
               </div>
 
@@ -726,7 +848,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                           variant="outline"
                           size="sm"
                           className="ml-4"
-                          onClick={() => {/* TODO: Implement file download */}}
+                          onClick={() => handleFileDownload(file)}
                         >
                           Download
                         </Button>
