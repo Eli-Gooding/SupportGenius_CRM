@@ -17,6 +17,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 
 interface SupabaseMessage {
   id: string
@@ -27,6 +29,30 @@ interface SupabaseMessage {
     id: string
     full_name: string
   }>
+}
+
+interface Note {
+  id: string
+  note_title: string
+  content: string
+  created_at: string
+  supporter: {
+    id: string
+    full_name: string
+  }
+}
+
+interface File {
+  id: string
+  file_name: string
+  file_size: number
+  mime_type: string
+  created_at: string
+  uploaded_by_type: 'user' | 'supporter'
+  uploaded_by: {
+    id: string
+    full_name: string
+  }
 }
 
 interface Message {
@@ -64,10 +90,14 @@ interface Ticket {
 export default function TicketDetails({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [notes, setNotes] = useState<Note[]>([])
+  const [files, setFiles] = useState<File[]>([])
   const [newMessage, setNewMessage] = useState("")
+  const [newNote, setNewNote] = useState({ title: "", content: "" })
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [activeTab, setActiveTab] = useState("messages")
   const router = useRouter()
   const supabase = createClient()
   const { toast } = useToast()
@@ -129,8 +159,54 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
     }
   }
 
+  const fetchNotes = async () => {
+    try {
+      const { data: notes, error } = await supabase
+        .from('notes')
+        .select(`
+          *,
+          supporter:supporters(id, full_name)
+        `)
+        .eq('ticket_id', params.id)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      setNotes(notes)
+    } catch (error) {
+      console.error('Error fetching notes:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load notes. Please try refreshing the page.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchFiles = async () => {
+    try {
+      const { data: files, error } = await supabase
+        .from('files')
+        .select(`
+          *,
+          uploaded_by:uploaded_by_id(id, full_name)
+        `)
+        .eq('ticket_id', params.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setFiles(files)
+    } catch (error) {
+      console.error('Error fetching files:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load files. Please try refreshing the page.",
+        variant: "destructive",
+      })
+    }
+  }
+
   useEffect(() => {
-    const fetchTicket = async () => {
+    const fetchData = async () => {
       try {
         const { data: ticketData, error: ticketError } = await supabase
           .from('tickets')
@@ -159,16 +235,20 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
         }
 
         setTicket(ticketData as Ticket)
-        await fetchMessages()
+        await Promise.all([
+          fetchMessages(),
+          fetchNotes(),
+          fetchFiles()
+        ])
       } catch (error) {
-        console.error('Error fetching ticket:', error)
+        console.error('Error fetching data:', error)
         router.push("/supporter-dashboard")
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchTicket()
+    fetchData()
   }, [params.id, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -275,6 +355,94 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
       })
     } finally {
       setIsUpdating(false)
+    }
+  }
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newNote.content.trim()) return
+
+    setIsSending(true)
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+
+      const { error: noteError } = await supabase
+        .from('notes')
+        .insert({
+          ticket_id: params.id,
+          supporter_id: userData.user.id,
+          note_title: newNote.title.trim() || null,
+          content: newNote.content.trim(),
+        })
+
+      if (noteError) throw noteError
+
+      setNewNote({ title: "", content: "" })
+      await fetchNotes()
+      toast({
+        title: "Note added",
+        description: "Your note has been added successfully.",
+      })
+    } catch (error) {
+      console.error('Error adding note:', error)
+      toast({
+        title: "Error",
+        description: "Failed to add note. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsSending(true)
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+
+      // Upload file to storage
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${params.id}/${Date.now()}.${fileExt}`
+      const { error: uploadError } = await supabase.storage
+        .from('ticket-files')
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      // Create file record
+      const { error: fileError } = await supabase
+        .from('files')
+        .insert({
+          ticket_id: params.id,
+          file_name: file.name,
+          file_size: file.size,
+          mime_type: file.type,
+          storage_path: fileName,
+          uploaded_by_type: 'supporter',
+          uploaded_by_id: userData.user.id,
+        })
+
+      if (fileError) throw fileError
+
+      await fetchFiles()
+      toast({
+        title: "File uploaded",
+        description: "Your file has been uploaded successfully.",
+      })
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      toast({
+        title: "Error",
+        description: "Failed to upload file. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -407,9 +575,14 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Messages</h3>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="messages">Messages</TabsTrigger>
+              <TabsTrigger value="notes">Notes</TabsTrigger>
+              <TabsTrigger value="files">Files</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="messages" className="space-y-4">
               <ScrollArea className="h-[400px] rounded-md border p-4">
                 <div className="space-y-4">
                   {messages.length === 0 ? (
@@ -442,27 +615,128 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                   )}
                 </div>
               </ScrollArea>
-            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="new-message">New Message</Label>
-                <div className="flex mt-2">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="new-message">New Message</Label>
+                  <div className="flex mt-2">
+                    <Input
+                      id="new-message"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Type your message here..."
+                      className="flex-grow"
+                      disabled={isSending}
+                    />
+                    <Button type="submit" className="ml-2" disabled={isSending || !newMessage.trim()}>
+                      {isSending ? "Sending..." : "Send"}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="notes" className="space-y-4">
+              <ScrollArea className="h-[300px] rounded-md border p-4">
+                <div className="space-y-4">
+                  {notes.length === 0 ? (
+                    <p className="text-sm text-gray-500">No notes yet.</p>
+                  ) : (
+                    notes.map((note) => (
+                      <div key={note.id} className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-medium">{note.note_title || 'Untitled Note'}</h4>
+                          <span className="text-xs text-gray-500">
+                            {new Date(note.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Added by {note.supporter.full_name}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+
+              <form onSubmit={handleAddNote} className="space-y-4">
+                <div>
+                  <Label htmlFor="note-title">Note Title (Optional)</Label>
                   <Input
-                    id="new-message"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type your message here..."
-                    className="flex-grow"
+                    id="note-title"
+                    value={newNote.title}
+                    onChange={(e) => setNewNote(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Enter note title..."
+                    className="mt-1"
                     disabled={isSending}
                   />
-                  <Button type="submit" className="ml-2" disabled={isSending || !newMessage.trim()}>
-                    {isSending ? "Sending..." : "Send"}
-                  </Button>
+                </div>
+                <div>
+                  <Label htmlFor="note-content">Note Content</Label>
+                  <Textarea
+                    id="note-content"
+                    value={newNote.content}
+                    onChange={(e) => setNewNote(prev => ({ ...prev, content: e.target.value }))}
+                    placeholder="Type your note here..."
+                    className="mt-1"
+                    disabled={isSending}
+                  />
+                </div>
+                <Button type="submit" disabled={isSending || !newNote.content.trim()}>
+                  {isSending ? "Adding..." : "Add Note"}
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="files" className="space-y-4">
+              <div className="mb-4">
+                <Label htmlFor="file-upload" className="block text-sm font-medium text-gray-700">
+                  Upload New File
+                </Label>
+                <div className="mt-1 flex items-center">
+                  <Input
+                    id="file-upload"
+                    type="file"
+                    onChange={handleFileUpload}
+                    disabled={isSending}
+                    className="flex-grow"
+                  />
                 </div>
               </div>
-            </form>
-          </div>
+
+              <ScrollArea className="h-[400px] rounded-md border p-4">
+                <div className="space-y-2">
+                  {files.length === 0 ? (
+                    <p className="text-sm text-gray-500">No files uploaded yet.</p>
+                  ) : (
+                    files.map((file) => (
+                      <div key={file.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {file.file_name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(file.created_at).toLocaleString()} • 
+                            {(file.file_size / 1024).toFixed(2)} KB • 
+                            Uploaded by {file.uploaded_by.full_name}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-4"
+                          onClick={() => {/* TODO: Implement file download */}}
+                        >
+                          Download
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
       <div className="mt-4">
