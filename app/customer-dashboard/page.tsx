@@ -67,7 +67,7 @@ export default function Dashboard() {
     router.push(`/tickets/${ticketId}`)
   }
 
-  const handleCreateNewCase = async (categoryId: string, description: string) => {
+  const handleCreateNewCase = async (categoryId: string, subject: string, description: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user) {
@@ -75,11 +75,12 @@ export default function Dashboard() {
         return
       }
 
-      const { data: ticket, error } = await supabase
+      // First create the ticket
+      const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
         .insert([
           {
-            title: description.slice(0, 100), // Use first 100 chars as title
+            title: subject,
             category_id: categoryId,
             created_by_user_id: session.user.id,
             ticket_status: 'new'
@@ -88,9 +89,23 @@ export default function Dashboard() {
         .select()
         .single()
 
-      if (error) throw error
+      if (ticketError) throw ticketError
 
       if (ticket) {
+        // Then create the initial message
+        const { error: messageError } = await supabase
+          .from('messages')
+          .insert([
+            {
+              ticket_id: ticket.id,
+              sender_type: 'user',
+              sender_id: session.user.id,
+              content: description
+            }
+          ])
+
+        if (messageError) throw messageError
+
         setActiveTickets([ticket, ...activeTickets])
         toast({
           title: "Success",

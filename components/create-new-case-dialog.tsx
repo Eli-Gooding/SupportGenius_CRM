@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 
@@ -17,12 +18,13 @@ interface Category {
 interface CreateNewCaseDialogProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (categoryId: string, description: string) => void
+  onSubmit: (categoryId: string, subject: string, description: string) => void
 }
 
 export function CreateNewCaseDialog({ isOpen, onClose, onSubmit }: CreateNewCaseDialogProps) {
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState("")
+  const [subject, setSubject] = useState("")
   const [description, setDescription] = useState("")
   const supabase = createClient()
 
@@ -43,8 +45,9 @@ export function CreateNewCaseDialog({ isOpen, onClose, onSubmit }: CreateNewCase
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(selectedCategoryId, description)
+    onSubmit(selectedCategoryId, subject, description)
     setSelectedCategoryId("")
+    setSubject("")
     setDescription("")
   }
 
@@ -74,6 +77,19 @@ export function CreateNewCaseDialog({ isOpen, onClose, onSubmit }: CreateNewCase
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="subject" className="text-right">
+                Subject
+              </Label>
+              <Input
+                id="subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="col-span-3"
+                placeholder="Brief summary of the issue"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="description" className="text-right">
                 Description
               </Label>
@@ -82,7 +98,7 @@ export function CreateNewCaseDialog({ isOpen, onClose, onSubmit }: CreateNewCase
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="col-span-3"
-                placeholder="Describe your issue..."
+                placeholder="Provide details about your issue..."
                 required
               />
             </div>
