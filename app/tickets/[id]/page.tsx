@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClient } from "@/lib/supabase/client"
-import { User, Building2, AlertCircle, Calendar, Clock } from "lucide-react"
+import { User, Building2, AlertCircle, Calendar, Clock, Copy, Check } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
   DropdownMenu,
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { GlobalSearch } from "@/components/global-search"
 
 interface SupabaseMessage {
   id: string
@@ -119,6 +120,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
   const router = useRouter()
   const supabase = createClient()
   const { toast } = useToast()
+  const [isCopied, setIsCopied] = useState(false)
 
   const fetchMessages = async () => {
     try {
@@ -562,6 +564,17 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
     }
   }
 
+  const handleCopyLink = () => {
+    const url = window.location.href
+    navigator.clipboard.writeText(url)
+    setIsCopied(true)
+    setTimeout(() => setIsCopied(false), 2000)
+    toast({
+      title: "Link copied",
+      description: "Ticket link has been copied to clipboard",
+    })
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -580,11 +593,34 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
 
   return (
     <div className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => router.push("/supporter-dashboard")}>
+            Back to Dashboard
+          </Button>
+        </div>
+        <GlobalSearch />
+      </div>
+
       <Card>
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
-              <CardTitle className="text-2xl mb-2">{ticket.title}</CardTitle>
+              <div className="flex items-center gap-2 mb-2">
+                <CardTitle className="text-2xl">{ticket.title}</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCopyLink}
+                  className="ml-1"
+                >
+                  {isCopied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
               <div className="flex items-center space-x-6 text-sm text-gray-500">
                 <div className="flex items-center">
                   <User className="h-4 w-4 mr-1" />
@@ -605,14 +641,22 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                   </Link>
                 </div>
               </div>
-              <div className="flex items-center space-x-6 text-sm text-gray-500 mt-2">
-                <div className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  <span>Created: {new Date(ticket.created_at).toLocaleString()}</span>
+              <div className="flex flex-col space-y-2 mt-2 text-sm text-gray-500">
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center">
+                    <span className="font-medium mr-1">ID:</span>
+                    <code className="px-2 py-1 bg-gray-100 rounded text-sm">{params.id}</code>
+                  </div>
                 </div>
-                <div className="flex items-center">
-                  <Clock className="h-4 w-4 mr-1" />
-                  <span>Updated: {new Date(ticket.updated_at).toLocaleString()}</span>
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    <span>Created: {new Date(ticket.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="h-4 w-4 mr-1" />
+                    <span>Updated: {new Date(ticket.updated_at).toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -861,11 +905,6 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           </Tabs>
         </CardContent>
       </Card>
-      <div className="mt-4">
-        <Button variant="outline" onClick={() => router.push("/supporter-dashboard")}>
-          Back to Dashboard
-        </Button>
-      </div>
     </div>
   )
 }
