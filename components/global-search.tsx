@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Building2, Search, Ticket, User } from "lucide-react"
+import { Building2, Search, Ticket, User, Loader2, ArrowRight } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
   Command,
@@ -14,12 +14,39 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
+import { useToast } from "@/components/ui/use-toast"
 
 interface SearchResult {
   id: string
   type: 'ticket' | 'customer' | 'supporter' | 'company'
   title: string
   subtitle?: string
+}
+
+interface TicketResult {
+  id: string
+  title: string
+  created_by_user: {
+    full_name: string
+  } | null
+}
+
+interface CustomerResult {
+  id: string
+  full_name: string
+  company: {
+    company_name: string
+  } | null
+}
+
+interface SupporterResult {
+  id: string
+  full_name: string
+}
+
+interface CompanyResult {
+  id: string
+  company_name: string
 }
 
 export function GlobalSearch() {
@@ -29,6 +56,23 @@ export function GlobalSearch() {
   const [isLoading, setIsLoading] = React.useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const { toast } = useToast()
+  const abortControllerRef = React.useRef<AbortController | null>(null)
+
+  // Reset states when dialog closes
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen)
+    if (!newOpen) {
+      // Clear the search state when closing
+      setQuery("")
+      setResults([])
+      setIsLoading(false)
+      // Cancel any in-flight requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -41,17 +85,28 @@ export function GlobalSearch() {
     return () => document.removeEventListener("keydown", down)
   }, [])
 
-  React.useEffect(() => {
-    const search = async () => {
-      if (!query) {
-        setResults([])
-        return
-      }
+  const performSearch = React.useCallback(async (searchQuery: string) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setResults([])
+      return
+    }
 
-      setIsLoading(true)
-      try {
-        // Search tickets
-        const { data: tickets } = await supabase
+    // Cancel any in-flight requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController()
+
+    setIsLoading(true)
+    try {
+      // Create the text search query
+      const formattedQuery = searchQuery.trim().split(/\s+/).join(' & ')
+
+      const [ticketsResponse, customersResponse, supportersResponse, companiesResponse] = await Promise.all([
+        // Search tickets using full-text search
+        supabase
           .from('tickets')
           .select(`
             id,
@@ -60,11 +115,12 @@ export function GlobalSearch() {
               full_name
             )
           `)
-          .ilike('title', `%${query}%`)
+          .textSearch('search_vector', formattedQuery)
           .limit(5)
+          .returns<TicketResult[]>(),
 
-        // Search customers (users)
-        const { data: customers } = await supabase
+        // Search customers using full-text search
+        supabase
           .from('users')
           .select(`
             id,
@@ -73,59 +129,149 @@ export function GlobalSearch() {
               company_name
             )
           `)
-          .ilike('full_name', `%${query}%`)
+          .textSearch('search_vector', formattedQuery)
           .limit(5)
+          .returns<CustomerResult[]>(),
 
-        // Search supporters
-        const { data: supporters } = await supabase
+        // Search supporters using full-text search
+        supabase
           .from('supporters')
           .select('id, full_name')
-          .ilike('full_name', `%${query}%`)
+          .textSearch('search_vector', formattedQuery)
           .limit(5)
+          .returns<SupporterResult[]>(),
 
-        // Search companies
-        const { data: companies } = await supabase
+        // Search companies using full-text search
+        supabase
           .from('companies')
           .select('id, company_name')
-          .ilike('company_name', `%${query}%`)
+          .textSearch('search_vector', formattedQuery)
           .limit(5)
+          .returns<CompanyResult[]>()
+      ])
 
-        const searchResults: SearchResult[] = [
-          ...(tickets?.map(ticket => ({
-            id: ticket.id,
-            type: 'ticket' as const,
-            title: ticket.title,
-            subtitle: `Created by ${ticket.created_by_user?.full_name || 'Unknown'}`
-          })) || []),
-          ...(customers?.map(customer => ({
-            id: customer.id,
-            type: 'customer' as const,
-            title: customer.full_name,
-            subtitle: customer.company?.company_name
-          })) || []),
-          ...(supporters?.map(supporter => ({
-            id: supporter.id,
-            type: 'supporter' as const,
-            title: supporter.full_name
-          })) || []),
-          ...(companies?.map(company => ({
-            id: company.id,
-            type: 'company' as const,
-            title: company.company_name
-          })) || [])
-        ]
+      // If no results with full-text search, try fallback to ILIKE
+      let finalResults = {
+        tickets: ticketsResponse.data || [],
+        customers: customersResponse.data || [],
+        supporters: supportersResponse.data || [],
+        companies: companiesResponse.data || []
+      }
 
+      if (!finalResults.tickets.length && 
+          !finalResults.customers.length && 
+          !finalResults.supporters.length && 
+          !finalResults.companies.length) {
+        const [fallbackTickets, fallbackCustomers, fallbackSupporters, fallbackCompanies] = await Promise.all([
+          supabase
+            .from('tickets')
+            .select(`
+              id,
+              title,
+              created_by_user:users!created_by_user_id (
+                full_name
+              )
+            `)
+            .ilike('title', `%${searchQuery}%`)
+            .limit(5)
+            .returns<TicketResult[]>(),
+
+          supabase
+            .from('users')
+            .select(`
+              id,
+              full_name,
+              company:companies!company_id (
+                company_name
+              )
+            `)
+            .ilike('full_name', `%${searchQuery}%`)
+            .limit(5)
+            .returns<CustomerResult[]>(),
+
+          supabase
+            .from('supporters')
+            .select('id, full_name')
+            .ilike('full_name', `%${searchQuery}%`)
+            .limit(5)
+            .returns<SupporterResult[]>(),
+
+          supabase
+            .from('companies')
+            .select('id, company_name')
+            .ilike('company_name', `%${searchQuery}%`)
+            .limit(5)
+            .returns<CompanyResult[]>()
+        ])
+
+        finalResults = {
+          tickets: fallbackTickets.data || [],
+          customers: fallbackCustomers.data || [],
+          supporters: fallbackSupporters.data || [],
+          companies: fallbackCompanies.data || []
+        }
+      }
+
+      const searchResults: SearchResult[] = [
+        ...finalResults.tickets.map(ticket => ({
+          id: ticket.id,
+          type: 'ticket' as const,
+          title: ticket.title,
+          subtitle: `Created by ${ticket.created_by_user?.full_name || 'Unknown'}`
+        })),
+        ...finalResults.customers.map(customer => ({
+          id: customer.id,
+          type: 'customer' as const,
+          title: customer.full_name,
+          subtitle: customer.company?.company_name
+        })),
+        ...finalResults.supporters.map(supporter => ({
+          id: supporter.id,
+          type: 'supporter' as const,
+          title: supporter.full_name
+        })),
+        ...finalResults.companies.map(company => ({
+          id: company.id,
+          type: 'company' as const,
+          title: company.company_name
+        }))
+      ]
+
+      // Only update results if this is still the current search
+      if (!abortControllerRef.current?.signal.aborted) {
         setResults(searchResults)
-      } catch (error) {
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Search error:', error)
-      } finally {
+        toast({
+          title: "Search Error",
+          description: "Failed to fetch search results. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      if (!abortControllerRef.current?.signal.aborted) {
         setIsLoading(false)
       }
     }
+  }, [supabase, toast])
 
-    const timeoutId = setTimeout(search, 300)
-    return () => clearTimeout(timeoutId)
-  }, [query])
+  // Handle query changes with debounce
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (open) { // Only perform search if dialog is open
+        performSearch(query)
+      }
+    }, 500)
+
+    return () => {
+      clearTimeout(timeoutId)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [query, open, performSearch])
 
   const handleSelect = (result: SearchResult) => {
     setOpen(false)
@@ -148,7 +294,7 @@ export function GlobalSearch() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => handleOpenChange(true)}
         className="relative w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
         <div className="flex items-center gap-2">
@@ -161,7 +307,7 @@ export function GlobalSearch() {
           </kbd>
         </div>
       </button>
-      <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandDialog open={open} onOpenChange={handleOpenChange}>
         <Command>
           <CommandInput
             placeholder="Search tickets, customers, supporters..."
@@ -169,8 +315,18 @@ export function GlobalSearch() {
             onValueChange={setQuery}
           />
           <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
-            {results.length > 0 && (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+              </div>
+            ) : query.length < 2 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Type at least 2 characters to search...
+              </div>
+            ) : results.length === 0 ? (
+              <CommandEmpty>No results found.</CommandEmpty>
+            ) : (
               <>
                 {results.filter(r => r.type === 'ticket').length > 0 && (
                   <CommandGroup heading="Tickets">
@@ -262,8 +418,26 @@ export function GlobalSearch() {
                     </CommandGroup>
                   </>
                 )}
+
+                <CommandSeparator />
               </>
             )}
+
+            <CommandGroup>
+              <CommandItem
+                onSelect={() => {
+                  setOpen(false)
+                  router.push(`/search?q=${encodeURIComponent(query)}`)
+                }}
+                className="flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  <span>Search for "{query}" in all items</span>
+                </div>
+                <ArrowRight className="h-4 w-4" />
+              </CommandItem>
+            </CommandGroup>
           </CommandList>
         </Command>
       </CommandDialog>

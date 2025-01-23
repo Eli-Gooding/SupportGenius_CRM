@@ -479,16 +479,6 @@ export default function SupporterDashboard() {
                 />
               </div>
             </ScrollArea>
-            {selectedTicketId && (
-              <RouteCaseDialog
-                ticketId={selectedTicketId}
-                onRouteComplete={() => {
-                  setSelectedTicketId(null)
-                  fetchTickets()
-                }}
-                showTrigger={false}
-              />
-            )}
           </TabsContent>
 
           <TabsContent value="my-cases">
@@ -504,6 +494,8 @@ export default function SupporterDashboard() {
                       isLoading={isLoading}
                       emptyMessage="No active cases"
                       onTicketClick={handleTicketClick}
+                      showRouteButton={true}
+                      onRouteClick={setSelectedTicketId}
                     />
                   </div>
                 </ScrollArea>
@@ -534,6 +526,17 @@ export default function SupporterDashboard() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {selectedTicketId && (
+          <RouteCaseDialog
+            ticketId={selectedTicketId}
+            onRouteComplete={() => {
+              setSelectedTicketId(null)
+              fetchTickets()
+            }}
+            showTrigger={false}
+          />
+        )}
       </div>
     </div>
   )
