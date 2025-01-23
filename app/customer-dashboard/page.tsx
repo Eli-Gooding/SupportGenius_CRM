@@ -64,7 +64,7 @@ export default function Dashboard() {
   }, [])
 
   const handleTicketClick = (ticketId: string) => {
-    router.push(`/tickets/${ticketId}`)
+    router.push(`/customer-tickets/${ticketId}`)
   }
 
   const handleCreateNewCase = async (categoryId: string, subject: string, description: string) => {
