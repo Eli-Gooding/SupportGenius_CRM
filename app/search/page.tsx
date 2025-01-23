@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card } from "@/components/ui/card"
@@ -47,7 +48,7 @@ interface SearchResults {
   companies: DbCompany[]
 }
 
-export default function SearchPage() {
+function SearchPageContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get("q") || ""
   const [activeTab, setActiveTab] = React.useState("tickets")
@@ -179,14 +180,6 @@ export default function SearchPage() {
     })
     return Array.from(companies)
   }, [results.customers])
-
-  if (isLoading) {
-    return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
 
   return (
     <div className="container mx-auto py-6">
@@ -431,5 +424,17 @@ export default function SearchPage() {
         </Tabs>
       </Card>
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <SearchPageContent />
+    </Suspense>
   )
 } 
