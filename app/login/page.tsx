@@ -23,10 +23,6 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      // Temporary: Skip authentication and redirect directly to supporter dashboard
-      router.replace('/supporter-dashboard')
-      
-      /* Comment out authentication logic for now
       const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -35,27 +31,44 @@ export default function Login() {
       if (signInError) throw signInError
       if (!authData.session) throw new Error('No session created')
 
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
-      })
+      // Check if user exists in supporters table
+      const { data: supporter } = await supabase
+        .from('supporters')
+        .select('id')
+        .eq('id', authData.session.user.id)
+        .single()
 
-      if (sessionError) throw sessionError
-
-      const response = await fetch('/api/auth/protected', {
-        headers: {
-          'Authorization': `Bearer ${authData.session.access_token}`
-        }
-      })
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error checking user type')
+      if (supporter) {
+        // Update last_login for supporter
+        await supabase
+          .from('supporters')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', authData.session.user.id)
+        
+        router.replace('/supporter-dashboard')
+        return
       }
 
-      const redirectPath = result.isSupporter ? '/supporter-dashboard' : '/customer-dashboard'
-      router.replace(redirectPath)
-      */
+      // Check if user exists in users (customers) table
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', authData.session.user.id)
+        .single()
+
+      if (user) {
+        // Update last_login for user
+        await supabase
+          .from('users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', authData.session.user.id)
+        
+        router.replace('/customer-dashboard')
+        return
+      }
+
+      // If we get here, the user isn't in either table
+      throw new Error('User account not found in system')
     } catch (error) {
       console.error('Login error:', error)
       setError(error instanceof Error ? error.message : 'An error occurred during login')
