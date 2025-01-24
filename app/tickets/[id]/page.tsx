@@ -20,6 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { GlobalSearch } from "@/components/global-search"
+import { ResponseTemplates } from "@/components/response-templates"
 
 interface SupabaseMessage {
   id: string
@@ -91,6 +92,11 @@ interface Ticket {
   priority: 'low' | 'medium' | 'high' | 'urgent' | null
   created_at: string
   updated_at: string
+  category_id: string | null
+  category: {
+    id: string
+    category_name: string
+  } | null
   created_by_user: {
     id: string
     full_name: string
@@ -283,7 +289,17 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
         const { data: ticketData, error: ticketError } = await supabase
           .from('tickets')
           .select(`
-            *,
+            id,
+            title,
+            ticket_status,
+            priority,
+            created_at,
+            updated_at,
+            category_id,
+            category:categories!category_id (
+              id,
+              category_name
+            ),
             created_by_user: users!created_by_user_id (
               id,
               full_name,
@@ -644,6 +660,12 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
               <div className="flex flex-col space-y-2 mt-2 text-sm text-gray-500">
                 <div className="flex items-center space-x-6">
                   <div className="flex items-center">
+                    <span className="font-medium mr-1">Queue:</span>
+                    <span>{ticket.category?.category_name || 'Uncategorized'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center">
                     <span className="font-medium mr-1">ID:</span>
                     <code className="px-2 py-1 bg-gray-100 rounded text-sm">{params.id}</code>
                   </div>
@@ -794,6 +816,11 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                   </div>
                 </div>
               </form>
+
+              <ResponseTemplates 
+                categoryId={ticket.category_id} 
+                onSelectTemplate={(content) => setNewMessage(content)}
+              />
             </TabsContent>
 
             <TabsContent value="notes" className="space-y-4">
