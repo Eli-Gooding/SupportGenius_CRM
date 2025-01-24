@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClient } from "@/lib/supabase/client"
-import { User, Building2, Calendar, Clock, Copy, Check } from "lucide-react"
+import { User, Building2, Calendar, Clock, Copy, Check, Star, StarOff } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -37,6 +37,13 @@ interface TicketFile {
   }
 }
 
+interface SupporterRating {
+  id: string
+  rating: number
+  review: string | null
+  created_at: string
+}
+
 interface Ticket {
   id: string
   title: string
@@ -56,6 +63,7 @@ interface Ticket {
     id: string
     full_name: string
   } | null
+  supporter_rating: SupporterRating[] | null
 }
 
 export default function CustomerTicketDetails({ params }: { params: { id: string } }) {
@@ -71,6 +79,10 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
   const supabase = createClient()
   const { toast } = useToast()
   const [isCopied, setIsCopied] = useState(false)
+  const [rating, setRating] = useState<number>(0)
+  const [review, setReview] = useState("")
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false)
+  const [hoveredRating, setHoveredRating] = useState<number>(0)
 
   const fetchMessages = async () => {
     try {
@@ -205,6 +217,7 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch ticket data
         const { data: ticketData, error: ticketError } = await supabase
           .from('tickets')
           .select(`
@@ -220,6 +233,12 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
             assigned_to_supporter: supporters!assigned_to_supporter_id (
               id,
               full_name
+            ),
+            supporter_rating: supporter_ratings!inner (
+              id,
+              rating,
+              review,
+              created_at
             )
           `)
           .eq('id', params.id)
@@ -231,7 +250,19 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
           return
         }
 
-        setTicket(ticketData as Ticket)
+        // Transform the supporter_rating data to match our interface
+        const transformedTicket = {
+          ...ticketData,
+          supporter_rating: ticketData.supporter_rating ? [ticketData.supporter_rating] : null
+        }
+
+        // If there's an existing rating, set it
+        if (transformedTicket.supporter_rating && transformedTicket.supporter_rating.length > 0) {
+          setRating(transformedTicket.supporter_rating[0].rating)
+          setReview(transformedTicket.supporter_rating[0].review || '')
+        }
+
+        setTicket(transformedTicket as Ticket)
         await Promise.all([
           fetchMessages(),
           fetchFiles()
@@ -392,6 +423,53 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
     })
   }
 
+  const handleRatingSubmit = async () => {
+    if (!ticket?.assigned_to_supporter?.id || rating === 0) return
+
+    setIsSubmittingRating(true)
+    try {
+      const { error } = await supabase
+        .from('supporter_ratings')
+        .insert({
+          ticket_id: params.id,
+          supporter_id: ticket.assigned_to_supporter.id,
+          rating,
+          review: review.trim() || null,
+          created_by_user_id: ticket.created_by_user?.id
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Rating submitted",
+        description: "Thank you for your feedback!",
+      })
+
+      // Update local state to reflect the new rating
+      setTicket(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          supporter_rating: [{
+            id: 'temp-id',
+            rating,
+            review: review.trim() || null,
+            created_at: new Date().toISOString()
+          }]
+        } as Ticket
+      })
+    } catch (error) {
+      console.error('Error submitting rating:', error)
+      toast({
+        title: "Error",
+        description: "Failed to submit rating. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmittingRating(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -509,6 +587,73 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
           </div>
         </CardHeader>
         <CardContent>
+          {ticket?.ticket_status === 'closed' && ticket.assigned_to_supporter && (
+            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <h3 className="text-lg font-medium mb-2">Rate Your Support Experience</h3>
+              {ticket.supporter_rating && ticket.supporter_rating.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-6 w-6 ${
+                          star <= ticket.supporter_rating![0].rating
+                            ? 'text-yellow-400 fill-yellow-400'
+                            : 'text-gray-300'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  {ticket.supporter_rating[0].review && (
+                    <p className="text-gray-600 italic">"{ticket.supporter_rating[0].review}"</p>
+                  )}
+                  <p className="text-sm text-gray-500">
+                    Submitted on {new Date(ticket.supporter_rating[0].created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <Label>Rating</Label>
+                    <div className="flex items-center gap-1 mt-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRating(star)}
+                          onMouseEnter={() => setHoveredRating(star)}
+                          onMouseLeave={() => setHoveredRating(0)}
+                          className="focus:outline-none"
+                        >
+                          {star <= (hoveredRating || rating) ? (
+                            <Star className="h-6 w-6 text-yellow-400 fill-yellow-400" />
+                          ) : (
+                            <StarOff className="h-6 w-6 text-gray-300" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="review">Review (Optional)</Label>
+                    <Input
+                      id="review"
+                      value={review}
+                      onChange={(e) => setReview(e.target.value)}
+                      placeholder="Share your experience with the support team..."
+                      className="mt-1"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleRatingSubmit}
+                    disabled={isSubmittingRating || rating === 0}
+                  >
+                    {isSubmittingRating ? "Submitting..." : "Submit Rating"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4">
               <TabsTrigger value="messages">Messages</TabsTrigger>
