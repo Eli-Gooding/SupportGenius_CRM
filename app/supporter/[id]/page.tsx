@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
-import { User, Calendar, Clock, Mail } from "lucide-react"
+import { User, Calendar, Clock, Mail, Star } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -55,6 +55,22 @@ interface TicketMetrics {
   }
 }
 
+interface SupporterRating {
+  id: string
+  rating: number
+  review: string | null
+  created_at: string
+  ticket: {
+    id: string
+    title: string
+  }
+}
+
+interface SupporterStats {
+  average_rating: number
+  total_ratings: number
+}
+
 export default function SupporterInfo({ params }: { params: { id: string } }) {
   const [supporter, setSupporter] = useState<SupporterInfo | null>(null)
   const [tickets, setTickets] = useState<AssignedTicket[]>([])
@@ -66,6 +82,8 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
     byStatus: { new: 0, in_progress: 0, requires_response: 0, closed: 0 }
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [ratings, setRatings] = useState<SupporterRating[]>([])
+  const [stats, setStats] = useState<SupporterStats | null>(null)
   const router = useRouter()
   const supabase = createClient()
   const { toast } = useToast()
@@ -112,7 +130,23 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
           .order('created_at', { ascending: false })
 
         if (ticketsError) throw ticketsError
-        setTickets(ticketsData as AssignedTicket[])
+
+        // Transform tickets data to match interface
+        const transformedTickets: AssignedTicket[] = ticketsData.map(ticket => ({
+          id: ticket.id,
+          title: ticket.title,
+          ticket_status: ticket.ticket_status,
+          priority: ticket.priority,
+          created_at: ticket.created_at,
+          updated_at: ticket.updated_at,
+          created_by_user: {
+            id: ticket.created_by_user[0].id,
+            full_name: ticket.created_by_user[0].full_name,
+            company: ticket.created_by_user[0].company?.[0] || null
+          }
+        }))
+
+        setTickets(transformedTickets)
 
         // Calculate metrics
         const ticketMetrics: TicketMetrics = {
@@ -134,6 +168,49 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
           }
         }
         setMetrics(ticketMetrics)
+
+        // Fetch supporter ratings stats
+        const { data: statsData, error: statsError } = await supabase
+          .rpc('get_supporter_average_rating', {
+            supporter_uuid: params.id
+          })
+
+        if (statsError) throw statsError
+        if (statsData && statsData.length > 0) {
+          setStats(statsData[0])
+        }
+
+        // Fetch all ratings for this supporter
+        const { data: ratingsData, error: ratingsError } = await supabase
+          .from('supporter_ratings')
+          .select(`
+            id,
+            rating,
+            review,
+            created_at,
+            ticket:tickets (
+              id,
+              title
+            )
+          `)
+          .eq('supporter_id', params.id)
+          .order('created_at', { ascending: false })
+
+        if (ratingsError) throw ratingsError
+
+        // Transform ratings data to match interface
+        const transformedRatings: SupporterRating[] = ratingsData?.map(rating => ({
+          id: rating.id,
+          rating: rating.rating,
+          review: rating.review,
+          created_at: rating.created_at,
+          ticket: {
+            id: rating.ticket[0].id,
+            title: rating.ticket[0].title
+          }
+        })) || []
+
+        setRatings(transformedRatings)
 
       } catch (error) {
         console.error('Error fetching supporter info:', error)
@@ -180,6 +257,7 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
           <TabsTrigger value="info">Supporter Info</TabsTrigger>
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
           <TabsTrigger value="tickets">Assigned Tickets</TabsTrigger>
+          <TabsTrigger value="reviews">Reviews</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info">
@@ -358,6 +436,84 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="reviews">
+          <div className="space-y-6">
+            {stats && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Overall Rating</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-8 w-8 ${
+                            star <= stats.average_rating
+                              ? 'text-yellow-400 fill-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="text-lg">
+                      <span className="font-medium">{stats.average_rating}</span>
+                      <span className="text-gray-500 ml-1">
+                        ({stats.total_ratings} {stats.total_ratings === 1 ? 'rating' : 'ratings'})
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer Reviews</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {ratings.length === 0 ? (
+                    <p className="text-gray-500">No reviews yet.</p>
+                  ) : (
+                    ratings.map((rating) => (
+                      <div key={rating.id} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-5 w-5 ${
+                                  star <= rating.rating
+                                    ? 'text-yellow-400 fill-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-sm text-gray-500">
+                            {new Date(rating.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {rating.review && (
+                          <p className="text-gray-600 mb-3">"{rating.review}"</p>
+                        )}
+                        <Link
+                          href={`/tickets/${rating.ticket.id}`}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          View Ticket: {rating.ticket.title}
+                        </Link>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 
