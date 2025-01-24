@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClient } from "@/lib/supabase/client"
-import { User, Building2, AlertCircle, Calendar, Clock, Copy, Check } from "lucide-react"
+import { User, Building2, AlertCircle, Calendar, Clock, Copy, Check, Star } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
   DropdownMenu,
@@ -85,6 +85,13 @@ interface TicketFile {
   }
 }
 
+interface SupporterRating {
+  id: string
+  rating: number
+  review: string | null
+  created_at: string
+}
+
 interface Ticket {
   id: string
   title: string
@@ -109,6 +116,7 @@ interface Ticket {
     id: string
     full_name: string
   } | null
+  supporter_rating: SupporterRating | null
 }
 
 export default function TicketDetails({ params }: { params: { id: string } }) {
@@ -322,7 +330,51 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           return
         }
 
-        setTicket(ticketData as Ticket)
+        // Fetch rating separately to ensure we get the correct data
+        const { data: ratingData, error: ratingError } = await supabase
+          .from('supporter_ratings')
+          .select('*')
+          .eq('ticket_id', params.id)
+          .single()
+
+        if (ratingError && ratingError.code !== 'PGRST116') { // Ignore "no rows returned" error
+          throw ratingError
+        }
+
+        // Transform the data to match our interfaces
+        const transformedTicket: Ticket = {
+          id: ticketData.id,
+          title: ticketData.title,
+          ticket_status: ticketData.ticket_status,
+          priority: ticketData.priority,
+          created_at: ticketData.created_at,
+          updated_at: ticketData.updated_at,
+          category_id: ticketData.category_id,
+          category: ticketData.category?.[0] || null,
+          created_by_user: ticketData.created_by_user?.[0] 
+            ? {
+                id: ticketData.created_by_user[0].id,
+                full_name: ticketData.created_by_user[0].full_name,
+                company: ticketData.created_by_user[0].company?.[0] 
+                  ? {
+                      id: ticketData.created_by_user[0].company[0].id,
+                      company_name: ticketData.created_by_user[0].company[0].company_name
+                    }
+                  : null
+              }
+            : null,
+          assigned_to_supporter: ticketData.assigned_to_supporter?.[0] || null,
+          supporter_rating: ratingData 
+            ? {
+                id: ratingData.id,
+                rating: ratingData.rating,
+                review: ratingData.review,
+                created_at: ratingData.created_at
+              }
+            : null
+        }
+
+        setTicket(transformedTicket)
         await Promise.all([
           fetchMessages(),
           fetchNotes(),
@@ -757,6 +809,32 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           </div>
         </CardHeader>
         <CardContent>
+          {ticket.ticket_status === 'closed' && ticket.supporter_rating && (
+            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <h3 className="text-lg font-medium mb-2">Customer Rating</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`h-6 w-6 ${
+                        star <= ticket.supporter_rating!.rating
+                          ? 'text-yellow-400 fill-yellow-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+                {ticket.supporter_rating.review && (
+                  <p className="text-gray-600 italic">"{ticket.supporter_rating.review}"</p>
+                )}
+                <p className="text-sm text-gray-500">
+                  Submitted on {new Date(ticket.supporter_rating.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          )}
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4">
               <TabsTrigger value="messages">Messages</TabsTrigger>
@@ -808,12 +886,21 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
                       onChange={(e) => setNewMessage(e.target.value)}
                       placeholder="Type your message here..."
                       className="flex-grow"
-                      disabled={isSending}
+                      disabled={isSending || ticket.ticket_status === 'closed'}
                     />
-                    <Button type="submit" className="ml-2" disabled={isSending || !newMessage.trim()}>
+                    <Button 
+                      type="submit" 
+                      className="ml-2" 
+                      disabled={isSending || !newMessage.trim() || ticket.ticket_status === 'closed'}
+                    >
                       {isSending ? "Sending..." : "Send"}
                     </Button>
                   </div>
+                  {ticket.ticket_status === 'closed' && (
+                    <p className="text-sm text-gray-500 mt-2">
+                      This ticket is closed. No new messages can be sent.
+                    </p>
+                  )}
                 </div>
               </form>
 
