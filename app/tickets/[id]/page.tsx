@@ -297,26 +297,20 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
         const { data: ticketData, error: ticketError } = await supabase
           .from('tickets')
           .select(`
-            id,
-            title,
-            ticket_status,
-            priority,
-            created_at,
-            updated_at,
-            category_id,
-            category:categories!category_id (
+            *,
+            category:categories (
               id,
               category_name
             ),
-            created_by_user: users!created_by_user_id (
+            created_by_user:users (
               id,
               full_name,
-              company: companies!company_id (
+              company:companies (
                 id,
                 company_name
               )
             ),
-            assigned_to_supporter: supporters!assigned_to_supporter_id (
+            assigned_to_supporter:supporters (
               id,
               full_name
             )
@@ -350,20 +344,15 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
           created_at: ticketData.created_at,
           updated_at: ticketData.updated_at,
           category_id: ticketData.category_id,
-          category: ticketData.category?.[0] || null,
-          created_by_user: ticketData.created_by_user?.[0] 
+          category: ticketData.category || null,
+          created_by_user: ticketData.created_by_user 
             ? {
-                id: ticketData.created_by_user[0].id,
-                full_name: ticketData.created_by_user[0].full_name,
-                company: ticketData.created_by_user[0].company?.[0] 
-                  ? {
-                      id: ticketData.created_by_user[0].company[0].id,
-                      company_name: ticketData.created_by_user[0].company[0].company_name
-                    }
-                  : null
+                id: ticketData.created_by_user.id,
+                full_name: ticketData.created_by_user.full_name,
+                company: ticketData.created_by_user.company || null
               }
             : null,
-          assigned_to_supporter: ticketData.assigned_to_supporter?.[0] || null,
+          assigned_to_supporter: ticketData.assigned_to_supporter || null,
           supporter_rating: ratingData 
             ? {
                 id: ratingData.id,
