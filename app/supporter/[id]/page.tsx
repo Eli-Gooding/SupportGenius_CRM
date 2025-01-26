@@ -132,7 +132,7 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
         if (ticketsError) throw ticketsError
 
         // Transform tickets data to match interface
-        const transformedTickets: AssignedTicket[] = ticketsData.map(ticket => ({
+        const transformedTickets: AssignedTicket[] = (ticketsData || []).map(ticket => ({
           id: ticket.id,
           title: ticket.title,
           ticket_status: ticket.ticket_status,
@@ -140,9 +140,12 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
           created_at: ticket.created_at,
           updated_at: ticket.updated_at,
           created_by_user: {
-            id: ticket.created_by_user[0].id,
-            full_name: ticket.created_by_user[0].full_name,
-            company: ticket.created_by_user[0].company?.[0] || null
+            id: ticket.created_by_user?.id,
+            full_name: ticket.created_by_user?.full_name,
+            company: ticket.created_by_user?.company ? {
+              id: ticket.created_by_user.company.id,
+              company_name: ticket.created_by_user.company.company_name
+            } : null
           }
         }))
 
@@ -150,21 +153,21 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
 
         // Calculate metrics
         const ticketMetrics: TicketMetrics = {
-          total: ticketsData.length,
-          active: ticketsData.filter(t => t.ticket_status !== 'closed').length,
-          closed: ticketsData.filter(t => t.ticket_status === 'closed').length,
+          total: ticketsData?.length || 0,
+          active: ticketsData?.filter(t => t.ticket_status !== 'closed').length || 0,
+          closed: ticketsData?.filter(t => t.ticket_status === 'closed').length || 0,
           byPriority: {
-            urgent: ticketsData.filter(t => t.priority === 'urgent').length,
-            high: ticketsData.filter(t => t.priority === 'high').length,
-            medium: ticketsData.filter(t => t.priority === 'medium').length,
-            low: ticketsData.filter(t => t.priority === 'low').length,
-            unset: ticketsData.filter(t => t.priority === null).length,
+            urgent: ticketsData?.filter(t => t.priority === 'urgent').length || 0,
+            high: ticketsData?.filter(t => t.priority === 'high').length || 0,
+            medium: ticketsData?.filter(t => t.priority === 'medium').length || 0,
+            low: ticketsData?.filter(t => t.priority === 'low').length || 0,
+            unset: ticketsData?.filter(t => t.priority === null).length || 0,
           },
           byStatus: {
-            new: ticketsData.filter(t => t.ticket_status === 'new').length,
-            in_progress: ticketsData.filter(t => t.ticket_status === 'in_progress').length,
-            requires_response: ticketsData.filter(t => t.ticket_status === 'requires_response').length,
-            closed: ticketsData.filter(t => t.ticket_status === 'closed').length,
+            new: ticketsData?.filter(t => t.ticket_status === 'new').length || 0,
+            in_progress: ticketsData?.filter(t => t.ticket_status === 'in_progress').length || 0,
+            requires_response: ticketsData?.filter(t => t.ticket_status === 'requires_response').length || 0,
+            closed: ticketsData?.filter(t => t.ticket_status === 'closed').length || 0,
           }
         }
         setMetrics(ticketMetrics)
@@ -188,7 +191,7 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
             rating,
             review,
             created_at,
-            ticket:tickets (
+            ticket:tickets!ticket_id (
               id,
               title
             )
@@ -199,16 +202,16 @@ export default function SupporterInfo({ params }: { params: { id: string } }) {
         if (ratingsError) throw ratingsError
 
         // Transform ratings data to match interface
-        const transformedRatings: SupporterRating[] = ratingsData?.map(rating => ({
+        const transformedRatings: SupporterRating[] = (ratingsData || []).map(rating => ({
           id: rating.id,
           rating: rating.rating,
           review: rating.review,
           created_at: rating.created_at,
           ticket: {
-            id: rating.ticket[0].id,
-            title: rating.ticket[0].title
+            id: rating.ticket?.id,
+            title: rating.ticket?.title
           }
-        })) || []
+        }))
 
         setRatings(transformedRatings)
 
