@@ -165,6 +165,24 @@ serve(async (req: Request) => {
       throw new Error('Invalid base64 data format');
     }
     
+    // After getting the email ID but before processing it
+    const { data: existingMessage } = await supabaseClient
+      .from('processed_emails')
+      .select('email_id')
+      .eq('email_id', emailId)
+      .single();
+
+    if (existingMessage) {
+      console.log(`Email ${emailId} already processed, skipping`);
+      return new Response(JSON.stringify({ 
+        success: true,
+        status: 'already_processed',
+        email_id: emailId
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Get the email details from Gmail API
     const response = await makeGmailRequest(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}?format=full`
@@ -298,6 +316,39 @@ serve(async (req: Request) => {
         method: 'POST',
         body: JSON.stringify({
           raw: btoa(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+        })
+      }
+    );
+
+    // After getting the email details
+    const labels = emailData.labelIds || [];
+    if (labels.includes('PROCESSED')) {
+      console.log(`Email ${emailId} already processed (has PROCESSED label), skipping`);
+      return new Response(JSON.stringify({ 
+        success: true,
+        status: 'already_processed',
+        email_id: emailId
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // After successful processing, record this email
+    await supabaseClient
+      .from('processed_emails')
+      .insert({
+        email_id: emailId,
+        processed_at: new Date().toISOString(),
+        history_id: historyId
+      });
+
+    // After successful processing, add the PROCESSED label
+    await makeGmailRequest(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}/modify`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          addLabelIds: ['PROCESSED']
         })
       }
     );
