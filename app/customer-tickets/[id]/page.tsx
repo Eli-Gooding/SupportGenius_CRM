@@ -234,7 +234,7 @@ export default function CustomerTicketDetails({ params }: { params: { id: string
               id,
               full_name
             ),
-            supporter_rating: supporter_ratings!inner (
+            supporter_rating: supporter_ratings (
               id,
               rating,
               review,
