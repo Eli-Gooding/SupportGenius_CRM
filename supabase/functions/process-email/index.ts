@@ -7,16 +7,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface GmailPushNotification {
+interface ProcessEmailRequest {
   message: {
-    data: string; // Base64 encoded JSON
+    data: string;
     messageId: string;
     publishTime: string;
     attributes?: {
       historyId: string;
     };
   };
-  subscription: string;
+  historyId?: string;
 }
 
 // Initialize Supabase client
@@ -31,12 +31,57 @@ const oauth2Client = new OAuth2Client({
   clientSecret: Deno.env.get('GMAIL_CLIENT_SECRET') ?? '',
   authorizationEndpointUri: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenUri: 'https://oauth2.googleapis.com/token',
+  redirectUri: '',
+  defaults: {
+    refresh_token: Deno.env.get('GMAIL_REFRESH_TOKEN')
+  }
 });
 
-// Set refresh token
-oauth2Client.setCredentials({
-  refresh_token: Deno.env.get('GMAIL_REFRESH_TOKEN')
-});
+// After oauth2Client initialization, add this helper function
+async function makeGmailRequest(url: string, options: RequestInit = {}) {
+  try {
+    // Get access token using the proven implementation from setup.ts
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: Deno.env.get('GMAIL_CLIENT_ID') ?? '',
+        client_secret: Deno.env.get('GMAIL_CLIENT_SECRET') ?? '',
+        refresh_token: Deno.env.get('GMAIL_REFRESH_TOKEN') ?? '',
+        grant_type: 'refresh_token',
+        scope: [
+          'https://www.googleapis.com/auth/gmail.modify',
+          'https://www.googleapis.com/auth/gmail.send'
+        ].join(' ')
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const error = await tokenResponse.text();
+      console.error('Token refresh error:', error);
+      throw new Error(`Failed to refresh access token: ${error}`);
+    }
+
+    const tokens = await tokenResponse.json();
+    
+    // Make request with token
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+
+    return response;
+  } catch (error) {
+    console.error('Error in makeGmailRequest:', error);
+    throw error;
+  }
+}
 
 async function getEmailTemplate(templateKey: string): Promise<{ subject_template: string; body_template: string; } | null> {
   const { data: template, error } = await supabaseClient
@@ -64,23 +109,66 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Get the push notification data
-    const pushData = await req.json() as GmailPushNotification;
+    console.log("1. Processing incoming request");
     
-    // Decode the base64 data
-    const decodedData = JSON.parse(atob(pushData.message.data));
-    const emailId = decodedData.message?.id || decodedData.emailId;
-    const historyId = pushData.message.attributes?.historyId || decodedData.historyId;
-
-    if (!emailId) {
-      throw new Error('No email ID found in notification');
+    const requestData = await req.json() as ProcessEmailRequest;
+    console.log("2. Full request data:", JSON.stringify(requestData, null, 2));
+    
+    if (!requestData.message?.data) {
+      throw new Error('No message data received');
     }
 
+    // Decode the base64 data
+    const decodedString = atob(requestData.message.data);
+    console.log("3. Decoded string:", decodedString);
+    
+    const decodedData = JSON.parse(decodedString);
+    console.log("4. Parsed data:", JSON.stringify(decodedData, null, 2));
+    
+    // Get the history details to find the email ID
+    const historyId = decodedData.historyId;
+    console.log("4a. Using historyId:", historyId);
+    
+    if (!historyId) {
+      throw new Error('No history ID found in notification');
+    }
+
+    // Instead of history, get the most recent message
+    const messagesResponse = await makeGmailRequest(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=1&labelIds=INBOX&q=newer_than:1h'
+    );
+
+    if (!messagesResponse.ok) {
+      const error = await messagesResponse.text();
+      console.error('Messages response error:', error);
+      throw new Error(`Failed to fetch messages: ${error}`);
+    }
+
+    const messagesData = await messagesResponse.json();
+    console.log("5. Messages response:", JSON.stringify(messagesData, null, 2));
+
+    const emailId = messagesData.messages?.[0]?.id;
+
+    if (!emailId) {
+      console.error("Messages data:", {
+        hasMessages: !!messagesData.messages,
+        messageCount: messagesData.messages?.length,
+        firstMessage: JSON.stringify(messagesData.messages?.[0])
+      });
+      throw new Error('No recent messages found');
+    }
+
+    // Validate base64 string
+    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!base64Regex.test(requestData.message.data)) {
+      console.error("Invalid base64 data received:", requestData.message.data.substring(0, 100) + "...");
+      throw new Error('Invalid base64 data format');
+    }
+    
     // Get the email details from Gmail API
-    const response = await oauth2Client.request({
-      url: `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}?format=full`,
-      method: 'GET'
-    });
+    const response = await makeGmailRequest(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}?format=full`
+    );
 
     if (!response.ok) {
       throw new Error('Failed to fetch email details');
@@ -204,13 +292,15 @@ serve(async (req: Request) => {
       emailBody
     ].join('');
 
-    await oauth2Client.request({
-      url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
-      method: 'POST',
-      body: JSON.stringify({
-        raw: btoa(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-      })
-    });
+    await makeGmailRequest(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          raw: btoa(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+        })
+      }
+    );
 
     return new Response(JSON.stringify({ 
       success: true,
@@ -219,10 +309,16 @@ serve(async (req: Request) => {
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
-  } catch (error: unknown) {
-    console.error('Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+  } catch (error) {
+    console.error("Detailed error:", error);
+    if (error instanceof Error) {
+      console.error("Error message:", error.message);
+      console.error("Stack trace:", error.stack);
+    }
+    return new Response(JSON.stringify({ 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: error instanceof Error ? error.stack : undefined
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

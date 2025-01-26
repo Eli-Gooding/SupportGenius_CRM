@@ -68,6 +68,45 @@ serve(async (req: Request) => {
     // If we have messages, acknowledge them
     if (pullData.receivedMessages && pullData.receivedMessages.length > 0) {
       console.log(`10. Processing ${pullData.receivedMessages.length} messages to acknowledge`);
+      
+      // Forward each message to process-email function
+      for (const message of pullData.receivedMessages) {
+        try {
+          console.log("Message structure:", {
+            hasMessage: !!message.message,
+            messageData: message.message,
+            ackId: message.ackId,
+            // Log the full message for debugging (be careful with sensitive data)
+            fullMessage: JSON.stringify(message, null, 2)
+          });
+
+          const processResponse = await fetch(
+            `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-email`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                message: message.message,  // Send the entire message object
+                historyId: message.message?.attributes?.historyId
+              })
+            }
+          );
+
+          if (!processResponse.ok) {
+            const errorText = await processResponse.text();
+            console.error(`Failed to process message: ${errorText}`);
+          } else {
+            console.log(`Successfully forwarded message to process-email function`);
+          }
+        } catch (error) {
+          console.error('Error forwarding message:', error);
+        }
+      }
+      
+      // Continue with acknowledgment...
       const ackIds = pullData.receivedMessages.map((msg: any) => msg.ackId);
       console.log(`10a. Acknowledgment IDs: ${JSON.stringify(ackIds)}`);
       
