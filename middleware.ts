@@ -10,7 +10,7 @@ const publicRoutes = [
   '/auth/callback', 
   '/api/auth/protected',
   '/supporter-dashboard',
-  '/customer-dashboard'
+  '/(customer)/customer-dashboard'
 ]
 
 export async function middleware(req: NextRequest) {
@@ -48,8 +48,7 @@ export const config = {
     '/',
     '/login',
     '/signup',
-    '/customer/:path*',
-    '/customer-dashboard/:path*',
+    '/(customer)/:path*',
     '/supporter-dashboard/:path*',
     '/api/auth/:path*',
   ],

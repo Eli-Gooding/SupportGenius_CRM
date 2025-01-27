@@ -140,4 +140,87 @@ insert into licenses (license_name, license_cost, license_ranking) values
 -- Set default license for existing users
 update users
 set license_id = (select id from licenses where license_name = 'Standard')
-where license_id is null; 
+where license_id is null;
+
+-- Create documentation categories table
+create table doc_categories (
+    id uuid default uuid_generate_v4() primary key,
+    category_name text not null unique,
+    category_description text,
+    created_at timestamp with time zone default now()
+);
+
+-- Add category to product documentation
+alter table product_documentation
+add column category_id uuid references doc_categories(id);
+
+-- Create license features table
+create table license_features (
+    id uuid default uuid_generate_v4() primary key,
+    license_id uuid references licenses(id) not null,
+    feature_name text not null,
+    feature_description text,
+    created_at timestamp with time zone default now()
+);
+
+-- Enable RLS for new tables
+alter table doc_categories enable row level security;
+alter table license_features enable row level security;
+
+-- RLS Policies for doc categories
+create policy "Allow public read access to doc categories"
+    on doc_categories for select
+    to public
+    using (true);
+
+create policy "Allow admin supporters to manage doc categories"
+    on doc_categories for all
+    to authenticated
+    using (
+        exists (
+            select 1 from supporters
+            where id = auth.uid()
+            and is_admin = true
+        )
+    );
+
+-- RLS Policies for license features
+create policy "Allow public read access to license features"
+    on license_features for select
+    to public
+    using (true);
+
+create policy "Allow admin supporters to manage license features"
+    on license_features for all
+    to authenticated
+    using (
+        exists (
+            select 1 from supporters
+            where id = auth.uid()
+            and is_admin = true
+        )
+    );
+
+-- Create indexes
+create index idx_product_documentation_category on product_documentation(category_id);
+create index idx_license_features_license on license_features(license_id);
+
+-- Insert sample doc categories
+insert into doc_categories (category_name, category_description) values
+    ('Getting Started', 'Basic guides and introduction materials'),
+    ('API Documentation', 'Technical API reference and guides'),
+    ('Best Practices', 'Recommended usage and optimization tips'),
+    ('Tutorials', 'Step-by-step guides and examples'),
+    ('FAQs', 'Frequently asked questions and troubleshooting');
+
+-- Insert sample license features
+insert into license_features (license_id, feature_name, feature_description) values
+    ((select id from licenses where license_name = 'Standard'), 'Basic Support', 'Email support with 48-hour response time'),
+    ((select id from licenses where license_name = 'Standard'), 'Core Features', 'Access to essential platform features'),
+    ((select id from licenses where license_name = 'Professional'), 'Priority Support', 'Email support with 24-hour response time'),
+    ((select id from licenses where license_name = 'Professional'), 'Advanced Features', 'Access to advanced analytics and reporting'),
+    ((select id from licenses where license_name = 'Professional'), 'API Access', 'Full API access with higher rate limits'),
+    ((select id from licenses where license_name = 'Enterprise'), 'Dedicated Support', '24/7 phone and email support with 4-hour response time'),
+    ((select id from licenses where license_name = 'Enterprise'), 'Custom Features', 'Custom feature development and integration'),
+    ((select id from licenses where license_name = 'Enterprise'), 'Unlimited Access', 'Unlimited access to all platform features'),
+    ((select id from licenses where license_name = 'Enterprise'), 'Priority Updates', 'Early access to new features and updates'); 
