@@ -15,6 +15,24 @@
   - `ChatSessionTool`
 - LangSmith Integration for monitoring
 
+## Required Environment Variables
+
+### Edge Function Variables
+- `SUPABASE_URL`: Your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key for database access
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `OPENAI_MODEL`: Model to use (defaults to "gpt-4-turbo-preview")
+- `AI_TEMPERATURE`: Temperature setting for responses (defaults to 0.7)
+
+### Optional LangSmith Variables
+- `LANGCHAIN_TRACING_V2`: Set to "true" to enable LangSmith
+- `LANGCHAIN_ENDPOINT`: LangSmith API endpoint
+- `LANGCHAIN_API_KEY`: Your LangSmith API key
+
+### Frontend Variables
+- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key for client access
+
 ## Data Flow and Workflow
 
 ### 1. Chat Initialization

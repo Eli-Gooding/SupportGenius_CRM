@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "langchain": "npm:langchain@0.0.200",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
+    "std/http/server.ts": "https://deno.land/std@0.168.0/http/server.ts",
+    "@langchain/core": "npm:@langchain/core@0.0.11"
+  }
+} 

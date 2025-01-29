@@ -1,4 +1,4 @@
-import { Tool } from "https://esm.sh/langchain/tools";
+import { Tool } from "https://esm.sh/langchain@0.0.77/tools";
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 interface ChatAction {
