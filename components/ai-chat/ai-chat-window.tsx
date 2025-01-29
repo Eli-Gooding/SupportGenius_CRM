@@ -8,12 +8,15 @@ import { Send } from "lucide-react";
 import { Command, CommandGroup, CommandItem } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { useMentionSearch, MentionSearchResult } from "@/hooks/use-mention-search";
+import { useAIChat } from "@/hooks/use-ai-chat";
+import { useAuth } from "@/hooks/use-auth";
 
 interface Message {
   id: string;
   content: string;
   sender: "user" | "ai";
   timestamp: Date;
+  isStreaming?: boolean;
 }
 
 interface AIChatWindowProps {
@@ -31,7 +34,47 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   const [mentions, setMentions] = useState<MentionSearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { searchMentions, isLoading } = useMentionSearch();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+  const { searchMentions, isLoading: isLoadingMentions } = useMentionSearch();
+
+  const { sendMessage, isLoading } = useAIChat({
+    sessionId: chatId,
+    supporterId: user?.id || "",
+    onToken: (token) => {
+      setMessages((prev) => {
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.sender === "ai" && lastMessage.isStreaming) {
+          return [
+            ...prev.slice(0, -1),
+            { ...lastMessage, content: lastMessage.content + token },
+          ];
+        }
+        return prev;
+      });
+    },
+    onError: (error) => {
+      console.error("AI Chat Error:", error);
+      // You could add a toast notification here
+    },
+    onComplete: () => {
+      setMessages((prev) => {
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.sender === "ai" && lastMessage.isStreaming) {
+          return [
+            ...prev.slice(0, -1),
+            { ...lastMessage, isStreaming: false },
+          ];
+        }
+        return prev;
+      });
+    },
+  });
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Reset selected index when mentions list changes
   useEffect(() => {
@@ -158,25 +201,40 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
           handleMentionSelect(mentions[selectedIndex]);
           break;
       }
-    } else if (e.key === "Enter" && !showMentions) {
+    } else if (e.key === "Enter" && !showMentions && !isLoading) {
       e.preventDefault();
-      sendMessage();
+      handleSendMessage();
     }
   };
 
-  const sendMessage = () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || isLoading) return;
 
-    const newMessage: Message = {
+    const userMessage: Message = {
       id: Date.now().toString(),
-      content: inputValue, // Store the full reference format
+      content: inputValue,
       sender: "user",
       timestamp: new Date(),
     };
 
-    setMessages([...messages, newMessage]);
+    const aiMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      content: "",
+      sender: "ai",
+      timestamp: new Date(),
+      isStreaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMessage, aiMessage]);
     setInputValue("");
     setDisplayValue("");
+
+    try {
+      await sendMessage(inputValue);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // You could add a toast notification here
+    }
   };
 
   return (
@@ -191,12 +249,14 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
                 "rounded-lg p-3",
                 message.sender === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
-                  : "bg-muted"
+                  : "bg-muted",
+                message.isStreaming && "animate-pulse"
               )}
             >
               {formatDisplayText(message.content)}
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
@@ -204,23 +264,20 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
       <div className="border-t p-4">
         <div className="relative">
           <div className="flex gap-2">
-            <div className="relative flex-1">
-              <div 
-                className="absolute inset-0 overflow-hidden pointer-events-none px-3 py-2"
-                aria-hidden="true"
-              >
-                {formatDisplayText(displayValue)}
-              </div>
-              <Input
-                ref={inputRef}
-                value={displayValue}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your message... Use @ to mention"
-                className="flex-1 transparent-selection"
-              />
-            </div>
-            <Button size="icon" onClick={sendMessage}>
+            <Input
+              ref={inputRef}
+              value={displayValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={isLoading ? "AI is thinking..." : "Type your message... Use @ to mention"}
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button 
+              size="icon" 
+              onClick={handleSendMessage}
+              disabled={isLoading || !inputValue.trim()}
+            >
               <Send className="h-4 w-4" />
             </Button>
           </div>
@@ -230,7 +287,7 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
             <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
               <Command className="border shadow-md rounded-lg bg-background">
                 <CommandGroup heading="Mentions">
-                  {isLoading ? (
+                  {isLoadingMentions ? (
                     <CommandItem disabled>Loading...</CommandItem>
                   ) : mentions.length === 0 ? (
                     <CommandItem disabled>No results found</CommandItem>
