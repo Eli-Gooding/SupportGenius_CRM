@@ -1,0 +1,44 @@
+# Proposed Extensions to SupportGenius Backend
+
+This document describes **new backend components** and **data structures** needed to support:
+
+1. **“@ Mention” Search** across Tickets, Supporters, Customers, Queues, and Accounts.
+2. **New Chat Objects** to track conversation history between **Supporters** and the **Language Model (LLM)**.
+3. A more **interactive workflow** where the LLM can clarify user instructions (“Just to confirm…”).
+
+By implementing these additions, Supporters can seamlessly reference existing entities (like tickets or users) in a chat while preserving a **detailed record** of every LLM exchange.
+
+---
+
+## 1. “@ Mention” Search
+
+### 1.1 Overview
+
+We want to enable a real-time autocomplete that, **when the user types “@”**, displays a dropdown of entities (tickets, supporters, customers, queues, and accounts) matching their partial input. This helps the LLM (and the user) clarify **exactly** which record they’re referencing.
+
+### 1.2 Backend Changes
+
+1. **Dedicated Endpoint** (e.g. `GET /search/mentions?query=XYZ`):
+   - **Input**: Query string (e.g., `XYZ`).  
+   - **Output**: A combined list of matching entities:
+     - Tickets (by partial match on title or ID).
+     - Supporters (by name or email).
+     - Customers (by name or email).
+     - Queues (by queue title or short code).
+     - Accounts (by account name or unique identifier).
+
+2. **Filtering & Pagination**: 
+   - Return up to, say, **10 matches** per entity type to avoid huge payloads.
+   - Possibly accept a `type` parameter if we want to limit search to just “tickets” or “supporters.”
+
+3. **Search Logic**: 
+   - For now, a simple SQL `LIKE` query or full-text index might suffice (e.g., `WHERE name ILIKE '%XYZ%'`).
+   - Merge results into a single JSON response, each annotated with a `type` field.
+
+Example **Response**:
+```json
+[
+  { "type": "ticket", "id": 123, "title": "Email Integration Bug" },
+  { "type": "supporter", "id": 42, "name": "Bob Jackson" },
+  ...
+]

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   LogOut,
 } from "lucide-react"
+import { AIChatLayout } from "@/components/ai-chat/ai-chat-layout"
 
 interface Supporter {
   id: string
@@ -85,64 +86,66 @@ export default function SupporterDashboardLayout({
   ]
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className="hidden lg:flex lg:flex-col lg:w-72 lg:fixed lg:inset-y-0 bg-gray-900">
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center h-16 flex-shrink-0 px-4 bg-gray-900">
-            <h1 className="text-xl font-bold text-white">SupportGenius</h1>
-          </div>
-          <ScrollArea className="flex-1 px-3 py-4">
-            <nav className="space-y-1">
-              {navigation.map((item) => {
-                const isActive = pathname === item.href
-                return (
-                  <Button
-                    key={item.name}
-                    variant="ghost"
-                    className={cn(
-                      "w-full justify-start gap-2",
-                      isActive
-                        ? "bg-gray-800 text-white"
-                        : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                    )}
-                    onClick={() => router.push(item.href)}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    {item.name}
-                  </Button>
-                )
-              })}
-            </nav>
-          </ScrollArea>
-          <div className="flex-shrink-0 flex border-t border-gray-800 p-4">
-            <div className="flex-shrink-0 w-full group block">
-              <div className="flex items-center">
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-white">
-                    {supporter?.full_name}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    className="mt-1 text-sm text-gray-300 hover:text-white flex items-center gap-2"
-                    onClick={handleSignOut}
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Sign out
-                  </Button>
+    <AIChatLayout>
+      <div className="flex h-screen">
+        {/* Sidebar */}
+        <div className="hidden lg:flex lg:flex-col lg:w-72 lg:fixed lg:inset-y-0 bg-gray-900">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center h-16 flex-shrink-0 px-4 bg-gray-900">
+              <h1 className="text-xl font-bold text-white">SupportGenius</h1>
+            </div>
+            <ScrollArea className="flex-1 px-3 py-4">
+              <nav className="space-y-1">
+                {navigation.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Button
+                      key={item.name}
+                      variant="ghost"
+                      className={cn(
+                        "w-full justify-start gap-2",
+                        isActive
+                          ? "bg-gray-800 text-white"
+                          : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                      )}
+                      onClick={() => router.push(item.href)}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      {item.name}
+                    </Button>
+                  )
+                })}
+              </nav>
+            </ScrollArea>
+            <div className="flex-shrink-0 flex border-t border-gray-800 p-4">
+              <div className="flex-shrink-0 w-full group block">
+                <div className="flex items-center">
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-white">
+                      {supporter?.full_name}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      className="mt-1 text-sm text-gray-300 hover:text-white flex items-center gap-2"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Main content */}
-      <div className="lg:pl-72 flex-1">
-        <main className="flex-1">
-          {children}
-        </main>
+        {/* Main content */}
+        <div className="lg:pl-72 flex-1">
+          <main className="flex-1">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </AIChatLayout>
   )
 } 
