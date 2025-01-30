@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useMentionSearch, MentionSearchResult } from "@/hooks/use-mention-search";
 import { useAIChat } from "@/hooks/use-ai-chat";
 import { useAuth } from "@/hooks/use-auth";
+import { createClient } from "@/lib/supabase/client";
 
 interface Message {
   id: string;
@@ -33,10 +34,12 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   const [cursorPosition, setCursorPosition] = useState(0);
   const [mentions, setMentions] = useState<MentionSearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [chatTitle, setChatTitle] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { searchMentions, isLoading: isLoadingMentions } = useMentionSearch();
+  const supabase = createClient();
 
   const { sendMessage, isLoading } = useAIChat({
     sessionId: chatId,
@@ -70,6 +73,52 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
       });
     },
   });
+
+  // Load chat messages
+  useEffect(() => {
+    const loadChatMessages = async () => {
+      const { data, error } = await supabase
+        .from("ai_chat_messages")
+        .select("*")
+        .eq("chat_session_id", chatId)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Failed to load chat messages:", error);
+        return;
+      }
+
+      if (data) {
+        const formattedMessages: Message[] = data.map(msg => ({
+          id: msg.id,
+          content: msg.content,
+          sender: msg.sender_type === "user" ? "user" : "ai",
+          timestamp: new Date(msg.created_at),
+          isStreaming: false
+        }));
+        setMessages(formattedMessages);
+      }
+    };
+
+    loadChatMessages();
+  }, [chatId, supabase]);
+
+  // Load chat title
+  useEffect(() => {
+    const loadChatTitle = async () => {
+      const { data, error } = await supabase
+        .from("ai_chat_sessions")
+        .select("title")
+        .eq("id", chatId)
+        .single();
+
+      if (!error && data) {
+        setChatTitle(data.title);
+      }
+    };
+
+    loadChatTitle();
+  }, [chatId, supabase]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -210,26 +259,44 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: inputValue,
-      sender: "user",
-      timestamp: new Date(),
-    };
-
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      content: "",
-      sender: "ai",
-      timestamp: new Date(),
-      isStreaming: true,
-    };
-
-    setMessages((prev) => [...prev, userMessage, aiMessage]);
-    setInputValue("");
-    setDisplayValue("");
-
     try {
+      // First, save the user's message to the database
+      const { data: savedMessage, error: saveError } = await supabase
+        .from("ai_chat_messages")
+        .insert({
+          chat_session_id: chatId,
+          sender_type: "user",
+          content: inputValue,
+        })
+        .select()
+        .single();
+
+      if (saveError) {
+        console.error("Failed to save user message:", saveError);
+        return;
+      }
+
+      // Update local state with the saved message
+      const userMessage: Message = {
+        id: savedMessage.id,
+        content: savedMessage.content,
+        sender: "user",
+        timestamp: new Date(savedMessage.created_at),
+      };
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "",
+        sender: "ai",
+        timestamp: new Date(),
+        isStreaming: true,
+      };
+
+      setMessages((prev) => [...prev, userMessage, aiMessage]);
+      setInputValue("");
+      setDisplayValue("");
+
+      // Now send the message to the AI
       await sendMessage(inputValue);
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -239,6 +306,11 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
+      {/* Chat Title */}
+      <div className="border-b px-4 py-2">
+        <h3 className="font-medium">{chatTitle}</h3>
+      </div>
+
       {/* Messages Area */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">

@@ -13,28 +13,43 @@ export class ChatSessionTool extends Tool {
   description = `Manage chat sessions. Available actions:
   - create: Create a new chat session
   - update: Update a chat session's title or status
-  - get_history: Get the chat history for a session`;
+  - get_history: Get the chat history for a session
+  The current session ID and supporter ID are available in the agent's memory.`;
 
   constructor(
     private readonly supabase: SupabaseClient,
-    private readonly supporterId: string
+    private readonly supporterId: string,
+    private readonly sessionId?: string
   ) {
     super();
   }
 
-  protected async _call(input: string): Promise<string> {
+  protected async _call(input: string, runManager?: any): Promise<string> {
     try {
       const { action, session_id, title, status } = JSON.parse(input) as ChatAction;
+      
+      // Use the session ID from constructor if available, otherwise use from input
+      const effectiveSessionId = this.sessionId || session_id;
+      
+      // If we have runManager, try to get additional context
+      const memory = runManager?.memory;
+      const contextSessionId = memory?.sessionId;
+      const contextSupporterId = memory?.supporterId;
+      
+      const finalSessionId = effectiveSessionId || contextSessionId;
+      const finalSupporterId = this.supporterId || contextSupporterId;
+      
+      if (!finalSessionId || !finalSupporterId) {
+        throw new Error("Missing session or supporter ID");
+      }
 
       switch (action) {
         case "create":
           return await this.createSession(title);
         case "update":
-          if (!session_id) throw new Error("session_id required for update");
-          return await this.updateSession(session_id, { title, status });
+          return await this.updateSession(finalSessionId, { title, status });
         case "get_history":
-          if (!session_id) throw new Error("session_id required for get_history");
-          return await this.getSessionHistory(session_id);
+          return await this.getSessionHistory(finalSessionId);
         default:
           throw new Error(`Unknown action: ${action}`);
       }

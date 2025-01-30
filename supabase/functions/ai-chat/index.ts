@@ -24,6 +24,12 @@ serve(async (req) => {
       throw new Error("Missing required fields: message, sessionId, or supporterId");
     }
 
+    console.log('Received request with:', {
+      message,
+      sessionId,
+      supporterId,
+    });
+
     // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -36,12 +42,15 @@ serve(async (req) => {
 
     // Initialize tools
     const tools = [
-      new ChatSessionTool(supabaseClient, supporterId),
+      new ChatSessionTool(supabaseClient, supporterId, sessionId),
       new SupabaseDatabaseTool(supabaseClient)
     ];
 
     // Initialize the model
     const openAiKey = Deno.env.get("OPENAI_API_KEY");
+    const langchainApiKey = Deno.env.get("LANGCHAIN_API_KEY");
+    const langchainProject = Deno.env.get("LANGCHAIN_PROJECT");
+    
     if (!openAiKey) {
       throw new Error("Missing OpenAI API key");
     }
@@ -54,26 +63,30 @@ serve(async (req) => {
 
     console.log("Initializing agent executor...");
     
-    // Initialize the agent
+    // Initialize the agent with tracing configuration
     const executor = await initializeAgentExecutorWithOptions(tools, model, {
-      agentType: "chat-conversational-react-description",
+      agentType: "zero-shot-react-description",
       verbose: true,
       returnIntermediateSteps: true,
       maxIterations: 3,
-      earlyStoppingMethod: "generate"
+      earlyStoppingMethod: "generate",
+      // Configure tracing if API key is available
+      ...(langchainApiKey ? {
+        tracingV2: true,
+        tracingV2Project: langchainProject || "default"
+      } : {})
     });
 
     console.log("Agent executor initialized successfully");
 
-    // Execute the agent
+    // Execute the agent with combined context and message
     const result = await executor.call({
-      input: message,
-      sessionId,
-      supporterId,
+      input: `Message: ${message}\nContext:\nSession ID: ${sessionId}\nSupporter ID: ${supporterId}`
     });
 
-    // Store the message in the database
-    const { error: dbError } = await supabaseClient
+    // Store AI response in the database
+    console.log('Attempting to store AI response...');
+    const { data: aiMessageData, error: aiMessageError } = await supabaseClient
       .from("ai_chat_messages")
       .insert({
         chat_session_id: sessionId,
@@ -82,11 +95,16 @@ serve(async (req) => {
         metadata: {
           model: model.modelName,
           temperature: model.temperature,
+          intermediate_steps: result.intermediateSteps
         }
-      });
+      })
+      .select();
 
-    if (dbError) {
-      throw new Error(`Failed to store message: ${dbError.message}`);
+    if (aiMessageError) {
+      console.error('Failed to store AI message:', aiMessageError);
+      throw new Error(`Failed to store AI message: ${aiMessageError.message}`);
+    } else {
+      console.log('Successfully stored AI message:', aiMessageData);
     }
 
     // Return the response
