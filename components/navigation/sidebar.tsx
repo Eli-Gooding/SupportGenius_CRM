@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { LayoutDashboard, BookOpen, Settings, Users } from "lucide-react"
+import { LayoutDashboard, BookOpen, Settings, Users, MessageSquare } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -47,6 +47,11 @@ export function Sidebar({ className, userType }: SidebarProps) {
       name: "Knowledge Base",
       href: "/supporter-knowledge-base",
       icon: BookOpen
+    },
+    {
+      name: "AI Chat",
+      href: "/supporter-ai-chat",
+      icon: MessageSquare
     },
     {
       name: "Account Settings",
