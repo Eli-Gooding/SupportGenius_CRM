@@ -16,43 +16,63 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const systemPrompt = `You are a routing assistant for support tickets. Your only job is to route tickets to supporters.
+const systemPrompt = `You are a support ticket assistant. You can route tickets and add communications.
 
-When you receive a message:
-1. Check the metadata.mentions object for:
-   - A ticket (entityType: "ticket") - use its entityId value directly as the ticket_id
-   - A supporter (entityType: "supporter") - use its entityId value directly as the assigned_to_supporter_id
+When you receive a message, check the metadata.mentions object for:
+- A ticket (entityType: "ticket") - use its entityId value directly as the ticket_id
+- A supporter (entityType: "supporter") - use its entityId value directly as the assigned_to_supporter_id
 
-2. If you find both a ticket and supporter mention:
-   - Extract the entityId values from the metadata
-   - Use these exact values in your action - do not modify them
-   - Format your response exactly like this:
+Available operations through the ticket_operations tool:
+
+1. Route a ticket:
+   When asked to route/assign a ticket and both ticket and supporter are mentioned:
    Action: ticket_operations
-   Action Input: {"action": "route_ticket", "ticket_id": "[ticket entityId value]", "assigned_to_supporter_id": "[supporter entityId value]"}
+   Action Input: {
+     "action": "route_ticket",
+     "ticket_id": "[ticket entityId]",
+     "assigned_to_supporter_id": "[supporter entityId]"
+   }
 
-Example metadata format and usage:
+2. Add a message:
+   When asked to send/add a message to a ticket:
+   Action: ticket_operations
+   Action Input: {
+     "action": "add_message",
+     "ticket_id": "[ticket entityId]",
+     "content": "Your message here"
+   }
+
+3. Add a note:
+   When asked to add an internal note/comment:
+   Action: ticket_operations
+   Action Input: {
+     "action": "add_note",
+     "ticket_id": "[ticket entityId]",
+     "content": "Your note here",
+     "note_title": "Optional title"
+   }
+
+Example metadata format:
 {
   "mentions": {
     "mention-123": {
-      "entityId": "9d06f7db-0a9a-468b-883a-42910304d07a",  // Use this exact value as ticket_id
+      "entityId": "b40e96b0-808c-4ed8-9802-bfbc13c8157e",
       "entityType": "ticket",
       "displayName": "Case Title"
     },
     "mention-789": {
-      "entityId": "5dfabf9d-45a2-4396-ab4d-e0c4b4fd2452",  // Use this exact value as assigned_to_supporter_id
+      "entityId": "5dfabf9d-45a2-4396-ab4d-e0c4b4fd2452",
       "entityType": "supporter",
       "displayName": "John Doe"
     }
   }
 }
 
-Example correct action using the above metadata:
-Action: ticket_operations
-Action Input: {"action": "route_ticket", "ticket_id": "9d06f7db-0a9a-468b-883a-42910304d07a", "assigned_to_supporter_id": "5dfabf9d-45a2-4396-ab4d-e0c4b4fd2452"}
-
-If you encounter any errors, explain them clearly to the user.
-Do not perform any additional checks or verifications.
-Format your responses professionally and clearly.`;
+Remember:
+1. Always use exactly "ticket_operations" as the Action
+2. Put the specific operation (route_ticket/add_message/add_note) in the action field of the Action Input
+3. Use the exact entityId values from the metadata
+4. Do not perform any additional checks or verifications`;
 
 serve(async (req) => {
   // Handle CORS
@@ -118,6 +138,22 @@ serve(async (req) => {
       returnIntermediateSteps: true,
       maxIterations: 5,
       earlyStoppingMethod: "generate",
+      agentArgs: {
+        prefix: `You are a support ticket assistant. You can route tickets and add communications.
+
+When you receive a message, check the metadata.mentions object for ticket and supporter information.
+
+Use ONLY the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: ticket_operations
+Action Input: the JSON payload for the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question`,
+      },
       // Configure tracing if API key is available
       ...(langchainApiKey ? {
         tracingV2: true,

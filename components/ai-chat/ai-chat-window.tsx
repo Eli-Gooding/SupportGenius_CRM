@@ -304,40 +304,97 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   };
 
   return (
-    <div className={cn("flex flex-col h-full", className)}>
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                "max-w-[80%] rounded-lg p-3",
-                msg.sender === "user"
-                  ? "ml-auto bg-primary text-primary-foreground"
-                  : "bg-muted"
-              )}
-            >
-              {formatDisplayText(msg.content)}
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
+    <div className={cn("relative flex flex-col h-full w-full flex-1", className)}>
+      {/* Chat Title */}
+      <div className="absolute top-0 left-0 right-0 border-b bg-background px-4 py-2 z-10">
+        <h3 className="font-medium">{chatTitle}</h3>
+      </div>
 
-      <form onSubmit={handleSendMessage} className="p-4 border-t">
-        <div className="flex gap-2">
-          <Input
-            ref={inputRef}
-            value={displayValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={isLoading ? "AI is thinking..." : "Type your message..."}
-            disabled={isLoading}
-          />
-          <Button type="submit" size="icon" disabled={isLoading || !inputValue.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
+      {/* Messages Area - Scrollable container */}
+      <div className="absolute top-[41px] bottom-[73px] left-0 right-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="flex flex-col gap-4 p-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "rounded-lg p-3 max-w-[calc(100%-2rem)]",
+                  message.sender === "user"
+                    ? "ml-auto bg-primary text-primary-foreground"
+                    : "bg-muted",
+                  message.isStreaming && "animate-pulse"
+                )}
+              >
+                {formatDisplayText(message.content)}
+              </div>
+            ))}
+            <div ref={messagesEndRef} className="h-4" />
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Input Area - Fixed at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 border-t bg-background">
+        <div className="p-4">
+          <div className="relative">
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={displayValue}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={isLoading ? "AI is thinking..." : "Type your message... Use @ to mention"}
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button 
+                size="icon" 
+                onClick={handleSendMessage}
+                disabled={isLoading || !inputValue.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Mentions Dropdown */}
+            {showMentions && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
+                <Command className="border shadow-md rounded-lg bg-background">
+                  <CommandGroup heading="Mentions">
+                    {isLoadingMentions ? (
+                      <CommandItem disabled>Loading...</CommandItem>
+                    ) : mentions.length === 0 ? (
+                      <CommandItem disabled>No results found</CommandItem>
+                    ) : (
+                      mentions.map((mention, index) => (
+                        <CommandItem
+                          key={mention.entityId}
+                          value={mention.entityId}
+                          onSelect={() => handleMentionSelect(mention)}
+                          className={cn(
+                            "flex flex-col items-start gap-1 py-2 cursor-pointer",
+                            selectedIndex === index && "bg-accent"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium bg-muted px-1.5 py-0.5 rounded capitalize">
+                              {mention.entityType}
+                            </span>
+                            <span className="font-medium">{mention.displayName}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {mention.secondaryText}
+                          </span>
+                        </CommandItem>
+                      ))
+                    )}
+                  </CommandGroup>
+                </Command>
+              </div>
+            )}
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 } 

@@ -21,8 +21,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { GlobalSearch } from "@/components/global-search"
 import { ResponseTemplates } from "@/components/response-templates"
-import { AIChatWindow } from "@/components/ai-chat/ai-chat-window"
-import { AIChatContainer } from "@/components/ai-chat/ai-chat-container"
 
 interface SupabaseMessage {
   id: string
@@ -651,7 +649,7 @@ export default function TicketDetails({ params }: { params: { id: string } }) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-4">
           <Button variant="outline" onClick={() => router.push("/supporter-dashboard")}>
