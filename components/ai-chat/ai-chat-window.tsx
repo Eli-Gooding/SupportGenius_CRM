@@ -35,6 +35,7 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   const [mentions, setMentions] = useState<MentionSearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [chatTitle, setChatTitle] = useState<string>("");
+  const [messageMetadata, setMessageMetadata] = useState<Record<string, any>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -196,30 +197,41 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   };
 
   const handleMentionSelect = (mention: MentionSearchResult) => {
-    const textBeforeMention = inputValue.slice(0, cursorPosition).lastIndexOf("@");
-    const textAfterCursor = inputValue.slice(cursorPosition);
+    const textBeforeMention = displayValue.slice(0, cursorPosition).lastIndexOf("@");
+    const textAfterCursor = displayValue.slice(cursorPosition);
     
     const nextSpaceIndex = textAfterCursor.indexOf(" ");
     const textAfterMention = nextSpaceIndex === -1 
       ? textAfterCursor 
       : textAfterCursor.slice(nextSpaceIndex);
     
-    // Create both the storage and display versions
-    const mentionStorage = `@${mention.entityType}:${mention.entityId}:${mention.displayName}`;
-    const mentionDisplay = `@${mention.displayName}`;
+    // Create a unique ID for this mention in the message
+    const mentionId = `mention-${Date.now()}`;
     
-    const newStorageValue = 
-      inputValue.slice(0, textBeforeMention) +
-      mentionStorage +
+    // Store the full mention metadata
+    setMessageMetadata(prev => ({
+      ...prev,
+      mentions: {
+        ...prev.mentions,
+        [mentionId]: {
+          entityId: mention.entityId,
+          entityType: mention.entityType,
+          displayName: mention.displayName,
+          secondaryText: mention.secondaryText
+        }
+      }
+    }));
+    
+    // Only use the display version everywhere for better UX
+    const mentionText = `@${mention.displayName}`;
+    
+    const newValue = 
+      displayValue.slice(0, textBeforeMention) +
+      mentionText +
       textAfterMention;
     
-    const newDisplayValue = 
-      inputValue.slice(0, textBeforeMention) +
-      mentionDisplay +
-      textAfterMention;
-    
-    setInputValue(newStorageValue);
-    setDisplayValue(newDisplayValue);
+    setInputValue(newValue);
+    setDisplayValue(newValue);
     setShowMentions(false);
     setMentionSearch("");
     inputRef.current?.focus();
@@ -257,139 +269,130 @@ export function AIChatWindow({ chatId, className }: AIChatWindowProps) {
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim()) return;
+
+    const newMessage: Message = {
+      id: crypto.randomUUID(),
+      content: displayValue,
+      sender: "user",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, newMessage]);
+    setInputValue("");
+    setDisplayValue("");
+    
+    // Reset metadata after sending
+    const currentMetadata = messageMetadata;
+    setMessageMetadata({});
 
     try {
-      // First, save the user's message to the database
-      const { data: savedMessage, error: saveError } = await supabase
-        .from("ai_chat_messages")
-        .insert({
-          chat_session_id: chatId,
-          sender_type: "user",
-          content: inputValue,
-        })
-        .select()
-        .single();
-
-      if (saveError) {
-        console.error("Failed to save user message:", saveError);
-        return;
-      }
-
-      // Update local state with the saved message
-      const userMessage: Message = {
-        id: savedMessage.id,
-        content: savedMessage.content,
-        sender: "user",
-        timestamp: new Date(savedMessage.created_at),
-      };
-
       const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: crypto.randomUUID(),
         content: "",
         sender: "ai",
         timestamp: new Date(),
         isStreaming: true,
       };
+      setMessages((prev) => [...prev, aiMessage]);
 
-      setMessages((prev) => [...prev, userMessage, aiMessage]);
-      setInputValue("");
-      setDisplayValue("");
-
-      // Now send the message to the AI
-      await sendMessage(inputValue);
+      await sendMessage(displayValue, currentMetadata);
     } catch (error) {
       console.error("Failed to send message:", error);
-      // You could add a toast notification here
+      setMessages((prev) => prev.slice(0, -1));
     }
   };
 
   return (
-    <div className={cn("flex h-full flex-col", className)}>
+    <div className={cn("relative flex flex-col h-full w-full flex-1", className)}>
       {/* Chat Title */}
-      <div className="border-b px-4 py-2">
+      <div className="absolute top-0 left-0 right-0 border-b bg-background px-4 py-2 z-10">
         <h3 className="font-medium">{chatTitle}</h3>
       </div>
 
-      {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "rounded-lg p-3",
-                message.sender === "user"
-                  ? "ml-auto bg-primary text-primary-foreground"
-                  : "bg-muted",
-                message.isStreaming && "animate-pulse"
-              )}
-            >
-              {formatDisplayText(message.content)}
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
-
-      {/* Input Area */}
-      <div className="border-t p-4">
-        <div className="relative">
-          <div className="flex gap-2">
-            <Input
-              ref={inputRef}
-              value={displayValue}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={isLoading ? "AI is thinking..." : "Type your message... Use @ to mention"}
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button 
-              size="icon" 
-              onClick={handleSendMessage}
-              disabled={isLoading || !inputValue.trim()}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+      {/* Messages Area - Scrollable container */}
+      <div className="absolute top-[41px] bottom-[73px] left-0 right-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="flex flex-col gap-4 p-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "rounded-lg p-3 max-w-[calc(100%-2rem)]",
+                  message.sender === "user"
+                    ? "ml-auto bg-primary text-primary-foreground"
+                    : "bg-muted",
+                  message.isStreaming && "animate-pulse"
+                )}
+              >
+                {formatDisplayText(message.content)}
+              </div>
+            ))}
+            <div ref={messagesEndRef} className="h-4" />
           </div>
+        </ScrollArea>
+      </div>
 
-          {/* Mentions Dropdown */}
-          {showMentions && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
-              <Command className="border shadow-md rounded-lg bg-background">
-                <CommandGroup heading="Mentions">
-                  {isLoadingMentions ? (
-                    <CommandItem disabled>Loading...</CommandItem>
-                  ) : mentions.length === 0 ? (
-                    <CommandItem disabled>No results found</CommandItem>
-                  ) : (
-                    mentions.map((mention, index) => (
-                      <CommandItem
-                        key={mention.entityId}
-                        value={mention.entityId}
-                        onSelect={() => handleMentionSelect(mention)}
-                        className={cn(
-                          "flex flex-col items-start gap-1 py-2 cursor-pointer",
-                          selectedIndex === index && "bg-accent"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium bg-muted px-1.5 py-0.5 rounded capitalize">
-                            {mention.entityType}
-                          </span>
-                          <span className="font-medium">{mention.displayName}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {mention.secondaryText}
-                        </span>
-                      </CommandItem>
-                    ))
-                  )}
-                </CommandGroup>
-              </Command>
+      {/* Input Area - Fixed at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 border-t bg-background">
+        <div className="p-4">
+          <div className="relative">
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={displayValue}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={isLoading ? "AI is thinking..." : "Type your message... Use @ to mention"}
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button 
+                size="icon" 
+                onClick={handleSendMessage}
+                disabled={isLoading || !inputValue.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
-          )}
+
+            {/* Mentions Dropdown */}
+            {showMentions && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
+                <Command className="border shadow-md rounded-lg bg-background">
+                  <CommandGroup heading="Mentions">
+                    {isLoadingMentions ? (
+                      <CommandItem disabled>Loading...</CommandItem>
+                    ) : mentions.length === 0 ? (
+                      <CommandItem disabled>No results found</CommandItem>
+                    ) : (
+                      mentions.map((mention, index) => (
+                        <CommandItem
+                          key={mention.entityId}
+                          value={mention.entityId}
+                          onSelect={() => handleMentionSelect(mention)}
+                          className={cn(
+                            "flex flex-col items-start gap-1 py-2 cursor-pointer",
+                            selectedIndex === index && "bg-accent"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium bg-muted px-1.5 py-0.5 rounded capitalize">
+                              {mention.entityType}
+                            </span>
+                            <span className="font-medium">{mention.displayName}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {mention.secondaryText}
+                          </span>
+                        </CommandItem>
+                      ))
+                    )}
+                  </CommandGroup>
+                </Command>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -20,7 +20,7 @@ export function useAIChat({
   const supabase = createClient();
 
   const sendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, metadata?: Record<string, any>) => {
       setIsLoading(true);
 
       try {
@@ -42,6 +42,7 @@ export function useAIChat({
             message,
             sessionId,
             supporterId,
+            metadata
           }),
         });
 
@@ -61,23 +62,24 @@ export function useAIChat({
           const { done, value } = await reader.read();
           if (done) break;
 
-          // Convert the chunk to text
           const chunk = decoder.decode(value);
           fullResponse += chunk;
           onToken?.(chunk);
         }
 
-        // Store the message in the local database
+        // Store the messages in the database
         await supabase.from("ai_chat_messages").insert([
           {
             chat_session_id: sessionId,
             sender_type: "user",
             content: message,
+            metadata: metadata || null
           },
           {
             chat_session_id: sessionId,
             sender_type: "llm",
             content: fullResponse,
+            metadata: null
           },
         ]);
 

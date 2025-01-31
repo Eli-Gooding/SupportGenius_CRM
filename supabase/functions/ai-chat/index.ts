@@ -5,11 +5,54 @@ import { initializeAgentExecutorWithOptions } from "https://esm.sh/langchain@0.0
 import { Tool } from "https://esm.sh/langchain@0.0.77/tools";
 import { SupabaseDatabaseTool } from "../_shared/database-tool.ts";
 import { ChatSessionTool } from "../_shared/chat-session-tool.ts";
+import { TicketTool } from "../_shared/ticket-tool.ts";
+
+// Initialize LangChain configuration
+const langchainApiKey = Deno.env.get("LANGCHAIN_API_KEY");
+const langchainProject = Deno.env.get("LANGCHAIN_PROJECT") || "default";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const systemPrompt = `You are a routing assistant for support tickets. Your only job is to route tickets to supporters.
+
+When you receive a message:
+1. Check the metadata.mentions object for:
+   - A ticket (entityType: "ticket") - use its entityId value directly as the ticket_id
+   - A supporter (entityType: "supporter") - use its entityId value directly as the assigned_to_supporter_id
+
+2. If you find both a ticket and supporter mention:
+   - Extract the entityId values from the metadata
+   - Use these exact values in your action - do not modify them
+   - Format your response exactly like this:
+   Action: ticket_operations
+   Action Input: {"action": "route_ticket", "ticket_id": "[ticket entityId value]", "assigned_to_supporter_id": "[supporter entityId value]"}
+
+Example metadata format and usage:
+{
+  "mentions": {
+    "mention-123": {
+      "entityId": "9d06f7db-0a9a-468b-883a-42910304d07a",  // Use this exact value as ticket_id
+      "entityType": "ticket",
+      "displayName": "Case Title"
+    },
+    "mention-789": {
+      "entityId": "5dfabf9d-45a2-4396-ab4d-e0c4b4fd2452",  // Use this exact value as assigned_to_supporter_id
+      "entityType": "supporter",
+      "displayName": "John Doe"
+    }
+  }
+}
+
+Example correct action using the above metadata:
+Action: ticket_operations
+Action Input: {"action": "route_ticket", "ticket_id": "9d06f7db-0a9a-468b-883a-42910304d07a", "assigned_to_supporter_id": "5dfabf9d-45a2-4396-ab4d-e0c4b4fd2452"}
+
+If you encounter any errors, explain them clearly to the user.
+Do not perform any additional checks or verifications.
+Format your responses professionally and clearly.`;
 
 serve(async (req) => {
   // Handle CORS
@@ -18,7 +61,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, sessionId, supporterId } = await req.json();
+    const { message, sessionId, supporterId, metadata } = await req.json();
 
     if (!message || !sessionId || !supporterId) {
       throw new Error("Missing required fields: message, sessionId, or supporterId");
@@ -28,6 +71,7 @@ serve(async (req) => {
       message,
       sessionId,
       supporterId,
+      metadata
     });
 
     // Create Supabase client
@@ -42,14 +86,18 @@ serve(async (req) => {
 
     // Initialize tools
     const tools = [
-      new ChatSessionTool(supabaseClient, supporterId, sessionId),
-      new SupabaseDatabaseTool(supabaseClient)
+      new TicketTool(supabaseClient, supporterId)
     ];
 
     // Initialize the model
     const openAiKey = Deno.env.get("OPENAI_API_KEY");
-    const langchainApiKey = Deno.env.get("LANGCHAIN_API_KEY");
-    const langchainProject = Deno.env.get("LANGCHAIN_PROJECT");
+    
+    // Debug logging for environment variables
+    console.log("Environment configuration:", {
+      hasOpenAiKey: !!openAiKey,
+      langchainProject,
+      supabaseUrl: !!supabaseUrl
+    });
     
     if (!openAiKey) {
       throw new Error("Missing OpenAI API key");
@@ -68,12 +116,19 @@ serve(async (req) => {
       agentType: "zero-shot-react-description",
       verbose: true,
       returnIntermediateSteps: true,
-      maxIterations: 3,
+      maxIterations: 5,
       earlyStoppingMethod: "generate",
       // Configure tracing if API key is available
       ...(langchainApiKey ? {
         tracingV2: true,
-        tracingV2Project: langchainProject || "default"
+        tracingV2Project: langchainProject,
+        tracingV2ApiKey: langchainApiKey,
+        tracingV2Endpoint: Deno.env.get("LANGCHAIN_ENDPOINT"),
+        headers: {
+          "Langchain-API-Key": langchainApiKey,
+          "Langchain-Project": langchainProject,
+          "Langchain-Trace-V2": "true"
+        }
       } : {})
     });
 
@@ -81,7 +136,7 @@ serve(async (req) => {
 
     // Execute the agent with combined context and message
     const result = await executor.call({
-      input: `Message: ${message}\nContext:\nSession ID: ${sessionId}\nSupporter ID: ${supporterId}`
+      input: `Message: ${message}\nContext:\nSession ID: ${sessionId}\nSupporter ID: ${supporterId}\nMetadata: ${JSON.stringify(metadata || {})}`
     });
 
     // Store AI response in the database
